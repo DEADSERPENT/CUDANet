@@ -13,6 +13,9 @@
 #include <time.h>
 #include <string.h> // Added for memset
 #include "load_data.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #define IMAGE_SIZE 784 // 28*28
 #define LABEL_SIZE 10
@@ -253,13 +256,27 @@ int main(int argc, char** argv) {
     float* weights = (float*) malloc(ns.num_weights * sizeof(float));
     float* biases = (float*) calloc(ns.num_biases, sizeof(float));
 
-    // **NEW**: Gradient accumulators for mini-batch
-    float* nabla_w = (float*) calloc(ns.num_weights, sizeof(float));
-    float* nabla_b = (float*) calloc(ns.num_biases, sizeof(float));
-
-    float* deltas = (float*) calloc(ns.num_nodes, sizeof(float));
-    float* z_list = (float*) calloc(ns.num_nodes, sizeof(float));
-    float* a_list = (float*) calloc(ns.num_nodes, sizeof(float));
+    // Gradient accumulators for mini-batch (one set per thread for OpenMP)
+#ifdef _OPENMP
+    int nthreads_omp = omp_get_max_threads();
+#else
+    int nthreads_omp = 1;
+#endif
+    float** thread_nabla_w = (float**) malloc(nthreads_omp * sizeof(float*));
+    float** thread_nabla_b = (float**) malloc(nthreads_omp * sizeof(float*));
+    float** thread_deltas  = (float**) malloc(nthreads_omp * sizeof(float*));
+    float** thread_z_list  = (float**) malloc(nthreads_omp * sizeof(float*));
+    float** thread_a_list  = (float**) malloc(nthreads_omp * sizeof(float*));
+    for (int t = 0; t < nthreads_omp; t++) {
+        thread_nabla_w[t] = (float*) calloc(ns.num_weights, sizeof(float));
+        thread_nabla_b[t] = (float*) calloc(ns.num_biases,  sizeof(float));
+        thread_deltas[t]  = (float*) calloc(ns.num_nodes,   sizeof(float));
+        thread_z_list[t]  = (float*) calloc(ns.num_nodes,   sizeof(float));
+        thread_a_list[t]  = (float*) calloc(ns.num_nodes,   sizeof(float));
+    }
+    // Single-threaded fallback aliases (used after parallel section)
+    float* nabla_w = thread_nabla_w[0];
+    float* nabla_b = thread_nabla_b[0];
 
     // --- Initialize Weights ---
     srand(42);
@@ -277,34 +294,53 @@ int main(int argc, char** argv) {
     for (int epoch = 0; epoch < ne; epoch++) {
         clock_t start = clock();
 
-        // **CORRECTED**: Zero out gradient accumulators for the new mini-batch
-        memset(nabla_w, 0, ns.num_weights * sizeof(float));
-        memset(nabla_b, 0, ns.num_biases * sizeof(float));
+        // Zero out all per-thread gradient accumulators
+        for (int t = 0; t < nthreads_omp; t++) {
+            memset(thread_nabla_w[t], 0, ns.num_weights * sizeof(float));
+            memset(thread_nabla_b[t], 0, ns.num_biases  * sizeof(float));
+        }
 
         // Create a random mini-batch
         for (int s = 0; s < nb; s++) {
             batch[s] = rand() % NUM_TRAIN;
         }
 
-        // --- Accumulate Gradients over the Mini-Batch ---
+        // --- Accumulate Gradients over the Mini-Batch (parallel over samples) ---
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+#endif
         for (int s = 0; s < nb; s++) {
-            forward_back_prop(train_image[batch[s]], train_label[batch[s]],
-                              weights, biases, deltas, a_list, z_list, output_type, ns);
+#ifdef _OPENMP
+            int tid = omp_get_thread_num();
+#else
+            int tid = 0;
+#endif
+            float* loc_del = thread_deltas[tid];
+            float* loc_a   = thread_a_list[tid];
+            float* loc_z   = thread_z_list[tid];
 
-            // **CORRECTED**: Add this sample's gradient to the accumulators
+            forward_back_prop(train_image[batch[s]], train_label[batch[s]],
+                              weights, biases, loc_del, loc_a, loc_z, output_type, ns);
+
+            // Accumulate into per-thread gradient buffers (no race condition)
             for (int l = 0; l < ns.L - 1; l++) {
-                // Biases
                 for (int i = 0; i < ns.layers[l + 1]; i++) {
-                    nabla_b[ns.biases_pstn[l] + i] += deltas[ns.dza_pstn[l + 1] + i];
+                    thread_nabla_b[tid][ns.biases_pstn[l] + i] +=
+                        loc_del[ns.dza_pstn[l + 1] + i];
                 }
-                // Weights
                 for (int i = 0; i < ns.layers[l]; i++) {
                     for (int j = 0; j < ns.layers[l + 1]; j++) {
-                        nabla_w[ns.weights_pstn[l] + j + i * ns.layers[l + 1]] +=
-                            a_list[ns.dza_pstn[l] + i] * deltas[ns.dza_pstn[l + 1] + j];
+                        thread_nabla_w[tid][ns.weights_pstn[l] + j + i * ns.layers[l + 1]] +=
+                            loc_a[ns.dza_pstn[l] + i] * loc_del[ns.dza_pstn[l + 1] + j];
                     }
                 }
             }
+        }
+
+        // Sequential reduction across threads into nabla_w[0] / nabla_b[0]
+        for (int t = 1; t < nthreads_omp; t++) {
+            for (int i = 0; i < ns.num_weights; i++) nabla_w[i] += thread_nabla_w[t][i];
+            for (int i = 0; i < ns.num_biases;  i++) nabla_b[i] += thread_nabla_b[t][i];
         }
 
         // --- Update Weights and Biases (Single Step) ---
@@ -336,10 +372,11 @@ int main(int argc, char** argv) {
     // --- Free Memory ---
     free(weights);
     free(biases);
-    free(nabla_w);
-    free(nabla_b);
-    free(deltas);
-    free(z_list);
-    free(a_list);
+    for (int t = 0; t < nthreads_omp; t++) {
+        free(thread_nabla_w[t]); free(thread_nabla_b[t]);
+        free(thread_deltas[t]);  free(thread_z_list[t]); free(thread_a_list[t]);
+    }
+    free(thread_nabla_w); free(thread_nabla_b);
+    free(thread_deltas);  free(thread_z_list); free(thread_a_list);
     return 0;
 }

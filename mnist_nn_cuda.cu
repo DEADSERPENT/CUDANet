@@ -8,8 +8,20 @@
 #include <cassert>
 #include "load_data.h"
 
+// Optional NVML energy/power profiling (compile with -DUSE_NVML -lnvidia-ml)
+#ifdef USE_NVML
+#include <nvml.h>
+#endif
+
 // Use CUDA Tensor Cores namespace
 using namespace nvcuda;
+
+// Dataset selection (compile with -DFASHION_MNIST=1 for Fashion-MNIST)
+#ifdef FASHION_MNIST
+  #define DATASET_NAME "Fashion-MNIST"
+#else
+  #define DATASET_NAME "MNIST"
+#endif
 
 #define IMAGE_SIZE 784 // 28*28
 #define LABEL_SIZE 10
@@ -632,6 +644,438 @@ __device__ void batch_norm_backward(float* delta_list, float* z_list, int layer_
 	}
 }
 #endif // USE_BATCH_NORM
+
+// Forward declarations needed by the new batch-correct BN kernels (defined later)
+__host__ __device__ void softmax(float* a, float* z, int l);
+__host__ __device__ void delta_cross_entropy(float* deltas, float* a_list, int label);
+
+// ============================================================================
+// BATCH-CORRECT TRAINING KERNELS  (USE_BATCH_NORM path)
+//
+// Root cause of the original BN bug: one_learning_cycle launches one thread per
+// sample; when thread 0 reads z-values of other samples to compute batch stats,
+// those threads are still running concurrently across blocks – no cross-block sync
+// exists within a single kernel launch.
+//
+// Fix: per-layer kernel launches separated by cudaDeviceSynchronize(), which acts
+// as an implicit global barrier before each BN statistics kernel.
+// ============================================================================
+
+// Copy batch images into a[0] (one thread per sample)
+__global__ void init_activations_kernel(
+    float* train_image, float* a_list, int* batch_d,
+    int nb, struct network_structure ns)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* a   = &a_list[ns.num_nodes * id];
+    float* img = &train_image[IMAGE_SIZE * batch_d[id]];
+    for (int i = 0; i < IMAGE_SIZE; i++) a[i] = img[i];
+}
+
+// Compute z[l] = W[l]*a[l-1]+b[l] for every sample (one thread per sample)
+__global__ void fwd_linear_kernel(
+    float* weights, float* biases,
+    float* a_list, float* z_list,
+    int l, struct network_structure ns, int nb)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* a = &a_list[ns.num_nodes * id];
+    float* z = &z_list[ns.num_nodes * id];
+    weight_x_a(&weights[ns.weights_pstn[l-1]], &a[ns.dza_pstn[l-1]],
+               &z[ns.dza_pstn[l]], ns.layers[l-1], ns.layers[l]);
+    for (int j = 0; j < ns.layers[l]; j++)
+        z[ns.dza_pstn[l]+j] += biases[ns.biases_pstn[l-1]+j];
+}
+
+// Parallel-reduction kernel: computes batch mean and variance for one layer.
+// gridDim.x = layer_size (one block per neuron), blockDim.x = 256.
+// MUST be called after cudaDeviceSynchronize() to ensure all z values are written.
+__global__ void bn_stats_kernel(
+    float* z_list, int layer_offset, int layer_size,
+    int num_nodes, int nb,
+    float* batch_mean, float* batch_var, int stat_offset)
+{
+    int neuron = blockIdx.x;
+    if (neuron >= layer_size) return;
+    int tid = threadIdx.x;
+    __shared__ float s_sum[256];
+    __shared__ float s_sq[256];
+
+    float local_sum = 0.0f;
+    for (int b = tid; b < nb; b += blockDim.x)
+        local_sum += z_list[b * num_nodes + layer_offset + neuron];
+    s_sum[tid] = local_sum;
+    __syncthreads();
+    for (int s = blockDim.x >> 1; s > 0; s >>= 1) {
+        if (tid < s) s_sum[tid] += s_sum[tid + s];
+        __syncthreads();
+    }
+    float mean = s_sum[0] / (float)nb;
+    if (tid == 0) batch_mean[stat_offset + neuron] = mean;
+    __syncthreads();
+
+    float local_sq = 0.0f;
+    for (int b = tid; b < nb; b += blockDim.x) {
+        float diff = z_list[b * num_nodes + layer_offset + neuron] - mean;
+        local_sq += diff * diff;
+    }
+    s_sq[tid] = local_sq;
+    __syncthreads();
+    for (int s = blockDim.x >> 1; s > 0; s >>= 1) {
+        if (tid < s) s_sq[tid] += s_sq[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) batch_var[stat_offset + neuron] = s_sq[0] / (float)nb;
+}
+
+// Apply BN affine transform: z = gamma*(z-mean)/sqrt(var+eps)+beta (one thread per sample)
+__global__ void bn_apply_kernel(
+    float* z_list, int layer_offset, int layer_size,
+    int num_nodes, int nb,
+    float* batch_mean, float* batch_var, int stat_offset,
+    float* gamma, float* beta, int gamma_offset)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    for (int n = 0; n < layer_size; n++) {
+        int idx = id * num_nodes + layer_offset + n;
+        float z_norm = (z_list[idx] - batch_mean[stat_offset + n]) /
+                       sqrtf(batch_var[stat_offset + n] + BN_EPSILON);
+        z_list[idx] = gamma[gamma_offset + n] * z_norm + beta[gamma_offset + n];
+    }
+}
+
+// Apply activation: ReLU for hidden layers, Softmax for output layer (one thread per sample)
+__global__ void apply_activation_kernel(
+    float* a_list, float* z_list,
+    int l, struct network_structure ns, int nb, int output_type)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* a = &a_list[ns.num_nodes * id];
+    float* z = &z_list[ns.num_nodes * id];
+    if (l < ns.L - 1) {
+        // ReLU for hidden layers
+        for (int j = 0; j < ns.layers[l]; j++)
+            a[ns.dza_pstn[l]+j] = fmaxf(0.0f, z[ns.dza_pstn[l]+j]);
+    } else {
+        // Softmax for output layer
+        if (output_type == 1)
+            softmax(&a[ns.dza_pstn[l]], &z[ns.dza_pstn[l]], ns.layers[l]);
+        else {
+            for (int j = 0; j < ns.layers[l]; j++)
+                a[ns.dza_pstn[l]+j] = 1.0f / (1.0f + expf(-z[ns.dza_pstn[l]+j]));
+        }
+    }
+}
+
+// Compute output-layer error delta[L-1] = softmax - one_hot (one thread per sample)
+__global__ void output_error_kernel(
+    float* a_list, float* z_list, float* deltas,
+    int* train_label, int* batch_d,
+    struct network_structure ns, int nb, int output_type)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    int label = train_label[batch_d[id]];
+    float* a = &a_list[ns.num_nodes * id];
+    float* d = &deltas[ns.num_nodes * id];
+    int L  = ns.L - 1;
+    delta_cross_entropy(&d[ns.dza_pstn[L]], &a[ns.dza_pstn[L]], label);
+}
+
+// Backprop: delta[l] = W[l+1]^T * delta[l+1] * relu'(z[l]) (one thread per sample)
+__global__ void backward_delta_kernel(
+    float* weights, float* deltas, float* z_list,
+    int l, struct network_structure ns, int nb)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* d = &deltas[ns.num_nodes * id];
+    float* z = &z_list[ns.num_nodes * id];
+    weight_x_d(&weights[ns.weights_pstn[l]],
+               &d[ns.dza_pstn[l+1]], &d[ns.dza_pstn[l]],
+               ns.layers[l], ns.layers[l+1]);
+    for (int j = 0; j < ns.layers[l]; j++)
+        d[ns.dza_pstn[l]+j] *= (z[ns.dza_pstn[l]+j] > 0.0f) ? 1.0f : 0.0f;
+}
+
+// BN backward stats: accumulate dgamma, dbeta and sum_dy, sum_dy_znorm for one layer.
+// gridDim.x = layer_size, blockDim.x = 256.
+__global__ void bn_backward_stats_kernel(
+    float* delta_list, float* z_list,
+    int layer_offset, int layer_size, int num_nodes, int nb,
+    float* batch_mean, float* batch_var, int stat_offset,
+    float* gamma, float* beta, int gamma_offset,
+    float* dgamma, float* dbeta, float* sum_dy, float* sum_dy_znorm)
+{
+    int neuron = blockIdx.x;
+    if (neuron >= layer_size) return;
+    int tid = threadIdx.x;
+
+    __shared__ float s_dg[256];
+    __shared__ float s_db[256];
+    __shared__ float s_dy[256];
+    __shared__ float s_dynorm[256];
+
+    float local_dg = 0.f, local_db = 0.f, local_dy = 0.f, local_dynorm = 0.f;
+    float mean  = batch_mean[stat_offset + neuron];
+    float var   = batch_var[stat_offset + neuron];
+    float std   = sqrtf(var + BN_EPSILON);
+    float g     = gamma[gamma_offset + neuron];
+    float b_val = beta[gamma_offset + neuron];
+
+    for (int s = tid; s < nb; s += blockDim.x) {
+        int idx    = s * num_nodes + layer_offset + neuron;
+        float dy   = delta_list[idx];
+        // Recover z_norm = (z_post - beta) / gamma
+        float z_n  = (z_list[idx] - b_val) / (g + 1e-10f);
+        local_dg     += dy * z_n;
+        local_db     += dy;
+        local_dy     += dy;
+        local_dynorm += dy * z_n;
+    }
+    s_dg[tid]     = local_dg;
+    s_db[tid]     = local_db;
+    s_dy[tid]     = local_dy;
+    s_dynorm[tid] = local_dynorm;
+    __syncthreads();
+    for (int s = blockDim.x >> 1; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_dg[tid]     += s_dg[tid + s];
+            s_db[tid]     += s_db[tid + s];
+            s_dy[tid]     += s_dy[tid + s];
+            s_dynorm[tid] += s_dynorm[tid + s];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        atomicAdd(&dgamma[gamma_offset + neuron], s_dg[0]);
+        atomicAdd(&dbeta[gamma_offset + neuron],  s_db[0]);
+        sum_dy[neuron]     = s_dy[0];
+        sum_dy_znorm[neuron] = s_dynorm[0];
+    }
+}
+
+// BN backward delta: transform delta from d/dz_bn → d/dz_pre (Ioffe & Szegedy 2015)
+// d/dz_pre[i] = (gamma/sqrt(var+eps)/N) * (N*dy[i] - sum_dy - z_norm[i]*sum_dy_znorm)
+__global__ void bn_backward_delta_kernel(
+    float* delta_list, float* z_list,
+    int layer_offset, int layer_size, int num_nodes, int nb,
+    float* batch_mean, float* batch_var, int stat_offset,
+    float* gamma, float* beta, int gamma_offset,
+    float* sum_dy, float* sum_dy_znorm)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float inv_N = 1.0f / (float)nb;
+    for (int n = 0; n < layer_size; n++) {
+        int idx    = id * num_nodes + layer_offset + n;
+        float g    = gamma[gamma_offset + n];
+        float std  = sqrtf(batch_var[stat_offset + n] + BN_EPSILON);
+        float z_n  = (z_list[idx] - beta[gamma_offset + n]) / (g + 1e-10f);
+        float dy   = delta_list[idx];
+        delta_list[idx] = (g / std) * inv_N *
+            ((float)nb * dy - sum_dy[n] - z_n * sum_dy_znorm[n]);
+    }
+}
+
+// SGD weight+bias update for one layer, accumulating over batch (one thread per sample)
+__global__ void sgd_layer_update_kernel(
+    float* weights, float* biases, float* deltas, float* a_list,
+    int l, struct network_structure ns, int nb, float alpha_nb)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* d = &deltas[ns.num_nodes * id];
+    float* a = &a_list[ns.num_nodes * id];
+    // dW[l][i,j] = delta[l+1][i] * a[l][j]
+    for (int i = 0; i < ns.layers[l+1]; i++) {
+        for (int j = 0; j < ns.layers[l]; j++) {
+            atomicAdd(&weights[ns.weights_pstn[l] + i + j * ns.layers[l+1]],
+                      -alpha_nb * d[ns.dza_pstn[l+1]+i] * a[ns.dza_pstn[l]+j]);
+        }
+        atomicAdd(&biases[ns.biases_pstn[l]+i],
+                  -alpha_nb * d[ns.dza_pstn[l+1]+i]);
+    }
+}
+
+// Update BN learnable parameters gamma and beta using accumulated gradients
+__global__ void bn_params_update_kernel(
+    float* gamma, float* beta, float* dgamma, float* dbeta,
+    int num_bn_params, float alpha_nb)
+{
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx >= num_bn_params) return;
+    gamma[idx] -= alpha_nb * dgamma[idx];
+    beta[idx]  -= alpha_nb * dbeta[idx];
+}
+
+// ============================================================================
+// TRUE WMMA TENSOR CORE KERNELS  (USE_TENSOR_CORES path)
+//
+// Each global kernel processes the entire batch as a matrix using warp-level
+// wmma::mma_sync on 16×16×16 FP16 tiles.  FP32→FP16 conversion is staged
+// through shared memory (one warp per block).
+//
+// Forward:  Z[nb × n_out] = A[nb × n_in] × W^T[n_in × n_out] + b[n_out]
+//   A stored row-major stride = num_nodes; W col-major stride = n_out
+//   W^T is identical storage read as row-major with ldm = n_out.
+//
+// Backward: dA[nb × n_in] = delta[nb × n_out] × W[n_out × n_in]
+//   W stored col-major: element (i,j) = weights[i + j*n_out], ldm = n_out.
+// ============================================================================
+#if USE_TENSOR_CORES
+
+// Forward GEMM: Z = A × W^T + b
+// Grid: dim3((nb+15)/16, (n_out+15)/16)  Block: dim3(32) — one warp per block
+__global__ void wmma_fwd_kernel(
+    const float* __restrict__ a_list,
+    const float* __restrict__ weights,
+    const float* __restrict__ biases,
+    float*                    z_list,
+    int a_offset,   // dza_pstn[l-1]
+    int z_offset,   // dza_pstn[l]
+    int w_offset,   // weights_pstn[l-1]
+    int b_offset,   // biases_pstn[l-1]
+    int n_in, int n_out, int nb, int num_nodes)
+{
+    int tileM = blockIdx.x;
+    int tileN = blockIdx.y;
+    int aRow  = tileM * WMMA_M;
+    int bCol  = tileN * WMMA_N;
+    if (aRow >= nb || bCol >= n_out) return;
+
+    __shared__ half  a_smem[WMMA_M * WMMA_K];
+    __shared__ half  b_smem[WMMA_K * WMMA_N];
+    __shared__ float c_smem[WMMA_M * WMMA_N];
+
+    wmma::fragment<wmma::matrix_a,    WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b,    WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> b_frag;
+    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float>                 c_frag;
+    wmma::fill_fragment(c_frag, 0.0f);
+
+    int lane = threadIdx.x;  // 0..31
+
+    for (int kBase = 0; kBase < n_in; kBase += WMMA_K) {
+        // Stage A tile (activations) into shared memory with FP32→FP16 conversion
+        for (int elem = lane; elem < WMMA_M * WMMA_K; elem += 32) {
+            int m = elem / WMMA_K, k = elem % WMMA_K;
+            int sample = aRow + m, inp = kBase + k;
+            float val = (sample < nb && inp < n_in) ?
+                a_list[sample * num_nodes + a_offset + inp] : 0.0f;
+            a_smem[m * WMMA_K + k] = __float2half(val);
+        }
+        // Stage B tile (W^T[kBase..+16, bCol..+16]) row-major, ldm = n_out
+        // W^T[k, n] = W[n, k] = weights[w_offset + n + k*n_out]
+        for (int elem = lane; elem < WMMA_K * WMMA_N; elem += 32) {
+            int k = elem / WMMA_N, n = elem % WMMA_N;
+            int inp = kBase + k, out = bCol + n;
+            float val = (inp < n_in && out < n_out) ?
+                weights[w_offset + out + inp * n_out] : 0.0f;
+            b_smem[k * WMMA_N + n] = __float2half(val);
+        }
+        __syncwarp();
+
+        wmma::load_matrix_sync(a_frag, a_smem, WMMA_K);
+        wmma::load_matrix_sync(b_frag, b_smem, WMMA_N);
+        wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+    }
+
+    wmma::store_matrix_sync(c_smem, c_frag, WMMA_N, wmma::mem_row_major);
+    __syncwarp();
+
+    // Scatter result back to z_list and add bias
+    for (int elem = lane; elem < WMMA_M * WMMA_N; elem += 32) {
+        int m = elem / WMMA_N, n = elem % WMMA_N;
+        int sample = aRow + m, out = bCol + n;
+        if (sample < nb && out < n_out)
+            z_list[sample * num_nodes + z_offset + out] =
+                c_smem[m * WMMA_N + n] + biases[b_offset + out];
+    }
+}
+
+// Backward GEMM: dA = delta × W
+// Grid: dim3((nb+15)/16, (n_in+15)/16)  Block: dim3(32) — one warp per block
+__global__ void wmma_bwd_delta_kernel(
+    const float* __restrict__ delta_next,
+    const float* __restrict__ weights,
+    float*                    delta_prev,
+    int dn_offset,  // dza_pstn[l+1]  (delta coming in)
+    int dp_offset,  // dza_pstn[l]    (delta going out)
+    int w_offset,   // weights_pstn[l]
+    int n_out, int n_in, int nb, int num_nodes)
+{
+    int tileM = blockIdx.x;
+    int tileK = blockIdx.y;
+    int aRow  = tileM * WMMA_M;
+    int bCol  = tileK * WMMA_N;
+    if (aRow >= nb || bCol >= n_in) return;
+
+    __shared__ half  a_smem[WMMA_M * WMMA_K];
+    __shared__ half  b_smem[WMMA_K * WMMA_N];
+    __shared__ float c_smem[WMMA_M * WMMA_N];
+
+    wmma::fragment<wmma::matrix_a,    WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b,    WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> b_frag;
+    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float>                 c_frag;
+    wmma::fill_fragment(c_frag, 0.0f);
+
+    int lane = threadIdx.x;
+
+    for (int nBase = 0; nBase < n_out; nBase += WMMA_K) {
+        // Stage A tile (delta_next) row-major
+        for (int elem = lane; elem < WMMA_M * WMMA_K; elem += 32) {
+            int m = elem / WMMA_K, k = elem % WMMA_K;
+            int sample = aRow + m, out = nBase + k;
+            float val = (sample < nb && out < n_out) ?
+                delta_next[sample * num_nodes + dn_offset + out] : 0.0f;
+            a_smem[m * WMMA_K + k] = __float2half(val);
+        }
+        // Stage B tile: W[nBase..+16, bCol..+16] col-major, ldm = n_out
+        // W[i, j] = weights[w_offset + i + j*n_out];  col-major: element(k,n) at b_smem[n*K+k]
+        for (int elem = lane; elem < WMMA_K * WMMA_N; elem += 32) {
+            int k = elem / WMMA_N, n = elem % WMMA_N;
+            int out_i = nBase + k, in_j = bCol + n;
+            float val = (out_i < n_out && in_j < n_in) ?
+                weights[w_offset + out_i + in_j * n_out] : 0.0f;
+            b_smem[n * WMMA_K + k] = __float2half(val);  // col-major layout
+        }
+        __syncwarp();
+
+        wmma::load_matrix_sync(a_frag, a_smem, WMMA_K);
+        wmma::load_matrix_sync(b_frag, b_smem, WMMA_K);  // col-major: ldm = K
+        wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+    }
+
+    wmma::store_matrix_sync(c_smem, c_frag, WMMA_N, wmma::mem_row_major);
+    __syncwarp();
+
+    for (int elem = lane; elem < WMMA_M * WMMA_N; elem += 32) {
+        int m = elem / WMMA_N, n = elem % WMMA_N;
+        int sample = aRow + m, in_j = bCol + n;
+        if (sample < nb && in_j < n_in)
+            delta_prev[sample * num_nodes + dp_offset + in_j] = c_smem[m * WMMA_N + n];
+    }
+}
+
+// Apply relu'(z[l]) mask to delta in-place (one thread per element)
+__global__ void apply_relu_mask_kernel(
+    float* delta_list, const float* z_list,
+    int delta_offset, int z_offset,
+    int layer_size, int nb, int num_nodes)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb * layer_size) return;
+    int sample = id / layer_size;
+    int neuron = id % layer_size;
+    int idx = sample * num_nodes + delta_offset + neuron;
+    delta_list[idx] *= (z_list[sample * num_nodes + z_offset + neuron] > 0.0f) ? 1.0f : 0.0f;
+}
+
+#endif // USE_TENSOR_CORES
 
 __host__ __device__ void softmax(float* a, float* z, int l){
     // Find the maximum value in z for numerical stability
@@ -1405,6 +1849,16 @@ int main(const int argc, const char** argv){
 	float *dgamma_d, *dbeta_d;
 	assert(cudaMalloc((void **) &dgamma_d, ns.num_bn_params*sizeof(float))==cudaSuccess);
 	assert(cudaMalloc((void **) &dbeta_d, ns.num_bn_params*sizeof(float))==cudaSuccess);
+	cudaMemset(dgamma_d, 0, ns.num_bn_params*sizeof(float));
+	cudaMemset(dbeta_d,  0, ns.num_bn_params*sizeof(float));
+
+	// Temporary reduction buffers used by BN backward pass (max hidden layer size)
+	int max_hidden_size = 0;
+	for (int l = 1; l < ns.L-1; l++)
+		if (ns.layers[l] > max_hidden_size) max_hidden_size = ns.layers[l];
+	float *sum_dy_d, *sum_dy_znorm_d;
+	assert(cudaMalloc((void **) &sum_dy_d,       max_hidden_size*sizeof(float))==cudaSuccess);
+	assert(cudaMalloc((void **) &sum_dy_znorm_d, max_hidden_size*sizeof(float))==cudaSuccess);
 
 	// Allocate GPU memory for BN optimizer state
 	#if OPTIMIZER_TYPE == 1 // Momentum
@@ -1445,6 +1899,21 @@ int main(const int argc, const char** argv){
 #else
 	int num_val = 0;
 	int num_train_actual = NUM_TRAIN;
+#endif
+
+	printf("Dataset: %s\n\n", DATASET_NAME);
+
+	// NVML power / energy profiling setup
+#ifdef USE_NVML
+	nvmlDevice_t nvml_device;
+	float total_energy_J = 0.0f;
+	bool nvml_ok = false;
+	if (nvmlInit() == NVML_SUCCESS && nvmlDeviceGetHandleByIndex(0, &nvml_device) == NVML_SUCCESS) {
+		nvml_ok = true;
+		printf("NVML: power profiling enabled\n");
+	} else {
+		printf("NVML: failed to initialise (profiling disabled)\n");
+	}
 #endif
 
 	// train NN
@@ -1489,29 +1958,163 @@ int main(const int argc, const char** argv){
 		/* --- main part --- */
 		cudaEventRecord( start_device, 0 ); // record cuda start time
 
-		// Phase 1: Gradient accumulation (feedforward & backpropagate & accumulate gradients)
+#if USE_BATCH_NORM
+		// ----------------------------------------------------------------
+		// BN-CORRECT TRAINING: per-layer kernel launches with global sync.
+		// Each cudaDeviceSynchronize() ensures ALL samples have written
+		// their z-values before BN statistics are computed.
+		// ----------------------------------------------------------------
+
+		// Initialise a[0] from batch images
+		init_activations_kernel<<<nblocks, nthreads>>>(
+			train_image_d, a_list_d, batch_d, nb, ns);
+
+		// Forward pass – one layer at a time
+		for (int l = 1; l < ns.L; l++) {
+			fwd_linear_kernel<<<nblocks, nthreads>>>(
+				weights_d, biases_d, a_list_d, z_list_d, l, ns, nb);
+
+			if (l < ns.L-1) {
+				cudaDeviceSynchronize(); // all z[l] written before stats
+				bn_stats_kernel<<<ns.layers[l], 256>>>(
+					z_list_d, ns.dza_pstn[l], ns.layers[l], ns.num_nodes, nb,
+					bn_mean_d, bn_var_d, ns.bn_gamma_pstn[l]);
+				bn_apply_kernel<<<nblocks, nthreads>>>(
+					z_list_d, ns.dza_pstn[l], ns.layers[l], ns.num_nodes, nb,
+					bn_mean_d, bn_var_d, ns.bn_gamma_pstn[l],
+					bn_gamma_d, bn_beta_d, ns.bn_gamma_pstn[l]);
+			}
+			apply_activation_kernel<<<nblocks, nthreads>>>(
+				a_list_d, z_list_d, l, ns, nb, output_type);
+		}
+
+		// Output-layer error
+		output_error_kernel<<<nblocks, nthreads>>>(
+			a_list_d, z_list_d, deltas_d, train_label_d, batch_d, ns, nb, output_type);
+
+		// Backward pass
+		for (int l = ns.L-2; l > 0; l--) {
+			backward_delta_kernel<<<nblocks, nthreads>>>(
+				weights_d, deltas_d, z_list_d, l, ns, nb);
+
+			if (l < ns.L-1) {
+				cudaDeviceSynchronize();
+				cudaMemset(sum_dy_d,       0, ns.layers[l]*sizeof(float));
+				cudaMemset(sum_dy_znorm_d, 0, ns.layers[l]*sizeof(float));
+				bn_backward_stats_kernel<<<ns.layers[l], 256>>>(
+					deltas_d, z_list_d,
+					ns.dza_pstn[l], ns.layers[l], ns.num_nodes, nb,
+					bn_mean_d, bn_var_d, ns.bn_gamma_pstn[l],
+					bn_gamma_d, bn_beta_d, ns.bn_gamma_pstn[l],
+					dgamma_d, dbeta_d, sum_dy_d, sum_dy_znorm_d);
+				bn_backward_delta_kernel<<<nblocks, nthreads>>>(
+					deltas_d, z_list_d,
+					ns.dza_pstn[l], ns.layers[l], ns.num_nodes, nb,
+					bn_mean_d, bn_var_d, ns.bn_gamma_pstn[l],
+					bn_gamma_d, bn_beta_d, ns.bn_gamma_pstn[l],
+					sum_dy_d, sum_dy_znorm_d);
+			}
+		}
+
+		// SGD weight+bias update for all layers
+		for (int l = 0; l < ns.L-1; l++)
+			sgd_layer_update_kernel<<<nblocks, nthreads>>>(
+				weights_d, biases_d, deltas_d, a_list_d, l, ns, nb, alpha_nb);
+
+		// Update BN parameters (gamma, beta) and reset accumulators
+		{
+			int bn_upd_threads = 256;
+			int bn_upd_blocks  = (ns.num_bn_params + bn_upd_threads - 1) / bn_upd_threads;
+			bn_params_update_kernel<<<bn_upd_blocks, bn_upd_threads>>>(
+				bn_gamma_d, bn_beta_d, dgamma_d, dbeta_d, ns.num_bn_params, alpha_nb);
+		}
+		cudaMemset(dgamma_d, 0, ns.num_bn_params*sizeof(float));
+		cudaMemset(dbeta_d,  0, ns.num_bn_params*sizeof(float));
+
+#elif USE_TENSOR_CORES
+		// ----------------------------------------------------------------
+		// WMMA TENSOR CORE TRAINING: per-layer batched GEMM kernels using
+		// warp-level wmma::mma_sync on 16×16×16 FP16 tiles.
+		// Falls back to scalar kernel for layers not divisible by 16.
+		// ----------------------------------------------------------------
+
+		init_activations_kernel<<<nblocks, nthreads>>>(
+			train_image_d, a_list_d, batch_d, nb, ns);
+		cudaDeviceSynchronize();
+
+		// Forward pass
+		for (int l = 1; l < ns.L; l++) {
+			int n_in  = ns.layers[l-1];
+			int n_out = ns.layers[l];
+			if (n_in % WMMA_K == 0 && n_out % WMMA_K == 0) {
+				dim3 wmma_grid((nb + WMMA_M - 1) / WMMA_M,
+				               (n_out + WMMA_N - 1) / WMMA_N);
+				wmma_fwd_kernel<<<wmma_grid, 32>>>(
+					a_list_d, weights_d, biases_d, z_list_d,
+					ns.dza_pstn[l-1], ns.dza_pstn[l],
+					ns.weights_pstn[l-1], ns.biases_pstn[l-1],
+					n_in, n_out, nb, ns.num_nodes);
+			} else {
+				fwd_linear_kernel<<<nblocks, nthreads>>>(
+					weights_d, biases_d, a_list_d, z_list_d, l, ns, nb);
+			}
+			apply_activation_kernel<<<nblocks, nthreads>>>(
+				a_list_d, z_list_d, l, ns, nb, output_type);
+			cudaDeviceSynchronize();
+		}
+
+		output_error_kernel<<<nblocks, nthreads>>>(
+			a_list_d, z_list_d, deltas_d, train_label_d, batch_d, ns, nb, output_type);
+		cudaDeviceSynchronize();
+
+		// Backward pass
+		for (int l = ns.L-2; l > 0; l--) {
+			int n_out_l = ns.layers[l+1];
+			int n_in_l  = ns.layers[l];
+			if (n_out_l % WMMA_K == 0 && n_in_l % WMMA_K == 0) {
+				dim3 wmma_grid((nb + WMMA_M - 1) / WMMA_M,
+				               (n_in_l + WMMA_N - 1) / WMMA_N);
+				wmma_bwd_delta_kernel<<<wmma_grid, 32>>>(
+					deltas_d, weights_d, deltas_d,
+					ns.dza_pstn[l+1], ns.dza_pstn[l],
+					ns.weights_pstn[l],
+					n_out_l, n_in_l, nb, ns.num_nodes);
+				int mask_blocks = (nb * n_in_l + nthreads - 1) / nthreads;
+				apply_relu_mask_kernel<<<mask_blocks, nthreads>>>(
+					deltas_d, z_list_d,
+					ns.dza_pstn[l], ns.dza_pstn[l],
+					n_in_l, nb, ns.num_nodes);
+			} else {
+				backward_delta_kernel<<<nblocks, nthreads>>>(
+					weights_d, deltas_d, z_list_d, l, ns, nb);
+			}
+			cudaDeviceSynchronize();
+		}
+
+		// SGD weight+bias update
+		for (int l = 0; l < ns.L-1; l++)
+			sgd_layer_update_kernel<<<nblocks, nthreads>>>(
+				weights_d, biases_d, deltas_d, a_list_d, l, ns, nb, alpha_nb);
+
+#else
+		// ----------------------------------------------------------------
+		// Standard training (monolithic kernel – fastest for non-BN case)
+		// ----------------------------------------------------------------
+		// Phase 1: Gradient accumulation (feedforward + backprop)
 		one_learning_cycle<<<nblocks, nthreads>>>(train_image_d, train_label_d,
 			weights_d, biases_d, deltas_d, a_list_d, z_list_d, batch_d, output_type, ns, nb, alpha_nb, epoch
 #if OPTIMIZER_TYPE == 1 || OPTIMIZER_TYPE == 2 // Momentum or Adam
-			, grad_w_d, grad_b_d  // Gradient buffers
-			, velocity_w_d, velocity_b_d  // Optimizer state (unused in kernel)
+			, grad_w_d, grad_b_d
+			, velocity_w_d, velocity_b_d
 #endif
 #if OPTIMIZER_TYPE == 2 // Adam
-			, m_w_d, v_w_d, m_b_d, v_b_d  // Optimizer state (unused in kernel)
-#endif
-#if USE_BATCH_NORM
-			, bn_gamma_d, bn_beta_d, bn_mean_d, bn_var_d, dgamma_d, dbeta_d
-#if OPTIMIZER_TYPE == 1 // Momentum
-			, velocity_bn_gamma_d, velocity_bn_beta_d
-#elif OPTIMIZER_TYPE == 2 // Adam
-			, m_bn_gamma_d, v_bn_gamma_d, m_bn_beta_d, v_bn_beta_d
-#endif
+			, m_w_d, v_w_d, m_b_d, v_b_d
 #endif
 		);
 
 #if OPTIMIZER_TYPE == 1 || OPTIMIZER_TYPE == 2
 		// Phase 2: Apply optimizer updates (Momentum/Adam only)
-		cudaDeviceSynchronize();  // Wait for gradient accumulation to complete
+		cudaDeviceSynchronize();
 		int opt_nthreads = 256;
 		int opt_nblocks_w = (num_weights + opt_nthreads - 1) / opt_nthreads;
 		int opt_nblocks_b = (num_biases + opt_nthreads - 1) / opt_nthreads;
@@ -1527,6 +2130,8 @@ int main(const int argc, const char** argv){
 		);
 #endif
 
+#endif // USE_BATCH_NORM / USE_TENSOR_CORES / standard
+
 		cudaEventRecord( stop_device, 0 ); // record cuda finish time
 		cudaEventSynchronize( stop_device );
 		cudaEventElapsedTime( &time_device, start_device, stop_device );
@@ -1535,12 +2140,31 @@ int main(const int argc, const char** argv){
 			totalTime += tElapsed;
 			avgTime = totalTime / (float)(epoch-1);
 		}
+
+#ifdef USE_NVML
+		// Sample instantaneous power and integrate over epoch (J = W * s)
+		if (nvml_ok) {
+			unsigned int power_mW = 0;
+			nvmlDeviceGetPowerUsage(nvml_device, &power_mW);
+			total_energy_J += (power_mW / 1000.0f) * tElapsed;
+		}
+#endif
 	}
 
 	// output final result
 	log_train_progress_gpu(train_image_d, train_label_d, test_image_d, test_label_d, ne,
 	 weights_d, biases_d, output_type, ns, num_train_actual, num_val);
 	printf("  Average time per epoch: %f sec\n", avgTime);
+
+#ifdef USE_NVML
+	if (nvml_ok) {
+		printf("  Total energy consumed:   %.2f J\n",   total_energy_J);
+		printf("  Energy per epoch:        %.2f J\n",   total_energy_J / (float)ne);
+		printf("  Energy per sample:       %.2f mJ\n",  total_energy_J / (float)ne /
+		                                                (float)num_train_actual * 1000.0f);
+		nvmlShutdown();
+	}
+#endif
 
 	// Save model if requested
 	if (save_model_flag == 1 || save_model_flag == 2){
@@ -1575,6 +2199,7 @@ int main(const int argc, const char** argv){
 	// Cleanup BN memory
 	cudaFree(bn_gamma_d); cudaFree(bn_beta_d); cudaFree(bn_mean_d); cudaFree(bn_var_d);
 	cudaFree(dgamma_d); cudaFree(dbeta_d);
+	cudaFree(sum_dy_d); cudaFree(sum_dy_znorm_d);
 	free(bn_gamma); free(bn_beta); free(bn_mean); free(bn_var);
 	#if OPTIMIZER_TYPE == 1
 		cudaFree(velocity_bn_gamma_d); cudaFree(velocity_bn_beta_d);

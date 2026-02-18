@@ -4,11 +4,18 @@
 #include <fcntl.h>
 #include <string.h>
 
-// set appropriate path for data
-#define TRAIN_IMAGE "./data/train-images-idx3-ubyte"
-#define TRAIN_LABEL "./data/train-labels-idx1-ubyte"
-#define TEST_IMAGE "./data/t10k-images-idx3-ubyte"
-#define TEST_LABEL "./data/t10k-labels-idx1-ubyte"
+// set appropriate path for data (supports MNIST and Fashion-MNIST)
+#ifdef FASHION_MNIST
+  #define TRAIN_IMAGE "./data/fashion-train-images-idx3-ubyte"
+  #define TRAIN_LABEL "./data/fashion-train-labels-idx1-ubyte"
+  #define TEST_IMAGE  "./data/fashion-t10k-images-idx3-ubyte"
+  #define TEST_LABEL  "./data/fashion-t10k-labels-idx1-ubyte"
+#else
+  #define TRAIN_IMAGE "./data/train-images-idx3-ubyte"
+  #define TRAIN_LABEL "./data/train-labels-idx1-ubyte"
+  #define TEST_IMAGE  "./data/t10k-images-idx3-ubyte"
+  #define TEST_LABEL  "./data/t10k-labels-idx1-ubyte"
+#endif
 
 #define SIZE 784 // 28*28
 #define NUM_TRAIN 60000
