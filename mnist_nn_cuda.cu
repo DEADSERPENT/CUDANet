@@ -902,15 +902,69 @@ __global__ void sgd_layer_update_kernel(
     }
 }
 
-// Update BN learnable parameters gamma and beta using accumulated gradients
+#if OPTIMIZER_TYPE == 1 || OPTIMIZER_TYPE == 2
+// Gradient accumulation kernel for BN training path.
+// Phase 1 of 2-phase update: each thread accumulates weight/bias gradients for
+// one sample into the shared gradient buffer via atomicAdd.
+// Phase 2 (apply_optimizer_update) is called once per batch after this kernel.
+__global__ void grad_accum_layer_kernel(
+    float* grad_w, float* grad_b, float* deltas, float* a_list,
+    int l, struct network_structure ns, int nb)
+{
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
+    if (id >= nb) return;
+    float* d = &deltas[ns.num_nodes * id];
+    float* a = &a_list[ns.num_nodes * id];
+    for (int i = 0; i < ns.layers[l+1]; i++) {
+        for (int j = 0; j < ns.layers[l]; j++) {
+            atomicAdd(&grad_w[ns.weights_pstn[l] + i + j * ns.layers[l+1]],
+                      d[ns.dza_pstn[l+1]+i] * a[ns.dza_pstn[l]+j]);
+        }
+        atomicAdd(&grad_b[ns.biases_pstn[l]+i], d[ns.dza_pstn[l+1]+i]);
+    }
+}
+#endif
+
+// Update BN learnable parameters (gamma, beta) – optimizer-aware (SGD/Momentum/Adam).
+// Gradient accumulators dgamma/dbeta are reset to zero inside this kernel.
 __global__ void bn_params_update_kernel(
     float* gamma, float* beta, float* dgamma, float* dbeta,
-    int num_bn_params, float alpha_nb)
+    int num_bn_params, float lr, int nb, int epoch
+#if OPTIMIZER_TYPE == 1
+    , float* vel_gamma, float* vel_beta
+#elif OPTIMIZER_TYPE == 2
+    , float* m_gamma, float* v_gamma, float* m_beta, float* v_beta
+#endif
+)
 {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx >= num_bn_params) return;
-    gamma[idx] -= alpha_nb * dgamma[idx];
-    beta[idx]  -= alpha_nb * dbeta[idx];
+#if OPTIMIZER_TYPE == 0
+    gamma[idx] -= (lr / (float)nb) * dgamma[idx];
+    beta[idx]  -= (lr / (float)nb) * dbeta[idx];
+#elif OPTIMIZER_TYPE == 1
+    float gg = dgamma[idx] / (float)nb;
+    float gb = dbeta[idx]  / (float)nb;
+    vel_gamma[idx] = MOMENTUM_COEF * vel_gamma[idx] + gg;
+    vel_beta[idx]  = MOMENTUM_COEF * vel_beta[idx]  + gb;
+    gamma[idx] -= lr * vel_gamma[idx];
+    beta[idx]  -= lr * vel_beta[idx];
+#elif OPTIMIZER_TYPE == 2
+    float gg = dgamma[idx] / (float)nb;
+    float gb = dbeta[idx]  / (float)nb;
+    m_gamma[idx] = ADAM_BETA1 * m_gamma[idx] + (1.0f - ADAM_BETA1) * gg;
+    v_gamma[idx] = ADAM_BETA2 * v_gamma[idx] + (1.0f - ADAM_BETA2) * gg * gg;
+    m_beta[idx]  = ADAM_BETA1 * m_beta[idx]  + (1.0f - ADAM_BETA1) * gb;
+    v_beta[idx]  = ADAM_BETA2 * v_beta[idx]  + (1.0f - ADAM_BETA2) * gb * gb;
+    float mhg = m_gamma[idx] / (1.0f - powf(ADAM_BETA1, (float)epoch));
+    float vhg = v_gamma[idx] / (1.0f - powf(ADAM_BETA2, (float)epoch));
+    float mhb = m_beta[idx]  / (1.0f - powf(ADAM_BETA1, (float)epoch));
+    float vhb = v_beta[idx]  / (1.0f - powf(ADAM_BETA2, (float)epoch));
+    gamma[idx] -= lr * mhg / (sqrtf(vhg) + ADAM_EPSILON);
+    beta[idx]  -= lr * mhb / (sqrtf(vhb) + ADAM_EPSILON);
+#endif
+    dgamma[idx] = 0.0f;  // Reset for next batch
+    dbeta[idx]  = 0.0f;
 }
 
 // ============================================================================
@@ -2016,20 +2070,46 @@ int main(const int argc, const char** argv){
 			}
 		}
 
-		// SGD weight+bias update for all layers
+		// Weight+bias update – optimizer-aware (SGD direct / Momentum+Adam 2-phase)
+#if OPTIMIZER_TYPE == 0  // SGD: direct atomic update per sample
 		for (int l = 0; l < ns.L-1; l++)
 			sgd_layer_update_kernel<<<nblocks, nthreads>>>(
 				weights_d, biases_d, deltas_d, a_list_d, l, ns, nb, alpha_nb);
+#else  // Momentum/Adam: Phase 1 accumulate gradients, Phase 2 apply optimizer
+		for (int l = 0; l < ns.L-1; l++)
+			grad_accum_layer_kernel<<<nblocks, nthreads>>>(
+				grad_w_d, grad_b_d, deltas_d, a_list_d, l, ns, nb);
+		cudaDeviceSynchronize();
+		{
+			int opt_nth  = 256;
+			int opt_nblk = (max(num_weights, num_biases) + opt_nth - 1) / opt_nth;
+			apply_optimizer_update<<<opt_nblk, opt_nth>>>(
+				weights_d, biases_d, grad_w_d, grad_b_d, num_weights, num_biases,
+				current_lr, nb, epoch + 1
+#if OPTIMIZER_TYPE == 1
+				, velocity_w_d, velocity_b_d
+#elif OPTIMIZER_TYPE == 2
+				, m_w_d, v_w_d, m_b_d, v_b_d
+#endif
+			);
+		}
+#endif
 
-		// Update BN parameters (gamma, beta) and reset accumulators
+		// Update BN learnable parameters (gamma, beta) – optimizer-aware
 		{
 			int bn_upd_threads = 256;
 			int bn_upd_blocks  = (ns.num_bn_params + bn_upd_threads - 1) / bn_upd_threads;
 			bn_params_update_kernel<<<bn_upd_blocks, bn_upd_threads>>>(
-				bn_gamma_d, bn_beta_d, dgamma_d, dbeta_d, ns.num_bn_params, alpha_nb);
+				bn_gamma_d, bn_beta_d, dgamma_d, dbeta_d, ns.num_bn_params,
+				current_lr, nb, epoch + 1
+#if OPTIMIZER_TYPE == 1
+				, velocity_bn_gamma_d, velocity_bn_beta_d
+#elif OPTIMIZER_TYPE == 2
+				, m_bn_gamma_d, v_bn_gamma_d, m_bn_beta_d, v_bn_beta_d
+#endif
+			);
+			// dgamma/dbeta reset is done inside bn_params_update_kernel
 		}
-		cudaMemset(dgamma_d, 0, ns.num_bn_params*sizeof(float));
-		cudaMemset(dbeta_d,  0, ns.num_bn_params*sizeof(float));
 
 #elif USE_TENSOR_CORES
 		// ----------------------------------------------------------------

@@ -1,33 +1,50 @@
-# Python virtual environment
-venv/
+# ── Compiled binaries ────────────────────────────────────────────────────────
+cuda
+cuda_adam
+cuda_adam_bn
+cuda_adam_lr
+cuda_batchnorm
+cuda_fashion
+cuda_fashion_full
+cuda_full
+cuda_lr_bn
+cuda_lr_schedule
+cuda_momentum
+cuda_nvml
+cuda_nvml_full
+cuda_wmma
+serial
+serial_omp
+infer
+*.o
+*.out
+
+# ── Model checkpoints (large generated files) ────────────────────────────────
+model_checkpoint.bin
+*.bin
+
+# ── MNIST dataset (downloaded via getdata.sh) ────────────────────────────────
+data/
+
+# ── Python cache ──────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# Compiled CUDA binaries
-cuda
-cuda_batchnorm
-infer
-*.o
-*.out
+# ── Core dumps ────────────────────────────────────────────────────────────────
+core
+core.*
 
-# Model checkpoints and data
-model_checkpoint.bin
-*.bin
-data/
-
-# IDE and editor files
+# ── IDE / editor ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# System files
 .DS_Store
 Thumbs.db
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints

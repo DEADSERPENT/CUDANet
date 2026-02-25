@@ -1,0 +1,20 @@
+Your Inputs:
+  Number of layers: 2 (Except for input and output layers)
+  Number of units in each layer: 128
+  Number of training epochs: 20
+  Number of training samples per batch: 2048
+  Learning Rate: 0.01
+  Your activation & cost functions at output layer: 1
+    (0: Sigmoid + MSE   1: Softmax + Cross-Entropy)
+  Save/Load: 0 (0=none, 1=save, 2=load+train)
+  Optimizer: Adam (beta1=0.900, beta2=0.999, eps=1e-08)
+
+Validation split: 48000 training, 12000 validation samples
+
+Dataset: MNIST
+
+Epoch 0: Train 0.10450, Val 0.09733, Test 0.10170  LR: 0.010000
+Epoch 5: Train 0.79230, Val 0.79508, Test 0.79430  LR: 0.008825  Average time per epoch: 0.194381 sec
+Epoch 10: Train 0.76980, Val 0.77250, Test 0.77000  LR: 0.007788  Average time per epoch: 0.165834 sec
+Epoch 15: Train 0.78010, Val 0.78850, Test 0.78240  LR: 0.006873  Average time per epoch: 0.158724 sec
+Epoch 20: Train 0.82300, Val 0.82733, Test 0.82160  Average time per epoch: 0.155864 sec

@@ -74,7 +74,8 @@ def plot_accuracy_curves(data_dict, output_file='training_accuracy.png'):
     fig, ax = plt.subplots(1, 1, figsize=(14, 8))
 
     colors = {'SGD': '#2E86AB', 'Momentum': '#A23B72', 'Adam': '#F18F01',
-              'SGD+LR': '#06A77D', 'BatchNorm': '#D00000'}
+              'Adam+LR': '#06A77D', 'SGD+LR': '#5C5C5C', 'BatchNorm': '#D00000',
+              'BN+SGD': '#9B2335', 'BN+Adam+LR': '#1B998B'}
     linestyles = {'train': '-', 'val': '--', 'test': '-.'}
 
     for name, data in data_dict.items():
@@ -95,7 +96,7 @@ def plot_accuracy_curves(data_dict, output_file='training_accuracy.png'):
 
     ax.set_xlabel('Epoch', fontweight='bold')
     ax.set_ylabel('Accuracy (%)', fontweight='bold')
-    ax.set_title('Training Accuracy Comparison: SGD vs Advanced Optimizers\n' +
+    ax.set_title('Training Accuracy Comparison: SGD / Momentum / Adam / BN+Adam+LR\n' +
                  'CUDA MLP on MNIST (2 layers × 128 neurons, batch size 2048)',
                  fontweight='bold', pad=20)
     ax.legend(loc='lower right', framealpha=0.9)
@@ -130,7 +131,8 @@ def plot_training_time(data_dict, output_file='training_time.png'):
     colors_list = []
 
     colors = {'SGD': '#2E86AB', 'Momentum': '#A23B72', 'Adam': '#F18F01',
-              'SGD+LR': '#06A77D', 'BatchNorm': '#D00000'}
+              'Adam+LR': '#06A77D', 'SGD+LR': '#5C5C5C', 'BatchNorm': '#D00000',
+              'BN+SGD': '#9B2335', 'BN+Adam+LR': '#1B998B'}
 
     for name, data in data_dict.items():
         if data['time_per_epoch']:
@@ -169,7 +171,8 @@ def plot_optimizer_convergence(data_dict, output_file='optimizer_convergence.png
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-    colors = {'SGD': '#2E86AB', 'Momentum': '#A23B72', 'Adam': '#F18F01'}
+    colors = {'SGD': '#2E86AB', 'Momentum': '#A23B72', 'Adam': '#F18F01',
+              'Adam+LR': '#06A77D', 'SGD+LR': '#5C5C5C'}
 
     # Left plot: First 5 epochs (zoomed in to show early convergence)
     for name, data in data_dict.items():
@@ -191,9 +194,9 @@ def plot_optimizer_convergence(data_dict, output_file='optimizer_convergence.png
     ax1.set_xlim(0, 5)
     ax1.set_ylim(0, 85)
 
-    # Add annotation showing Adam's faster convergence
-    ax1.annotate('Adam converges\nfastest (78% by epoch 5)',
-                xy=(5, 78.7), xytext=(3, 55),
+    # Add annotation showing Adam's faster early convergence
+    ax1.annotate('Adam/BN+Adam+LR\nconverge fastest (56-79% by ep.5)',
+                xy=(5, 57.5), xytext=(2.5, 30),
                 arrowprops=dict(arrowstyle='->', color='#F18F01', lw=2),
                 fontsize=10, color='#F18F01', fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.8))
@@ -212,9 +215,9 @@ def plot_optimizer_convergence(data_dict, output_file='optimizer_convergence.png
     ax2.set_title('Full Training Run (All Epochs)', fontweight='bold')
     ax2.legend(loc='lower right')
     ax2.grid(True, alpha=0.3)
-    ax2.set_ylim(0, 90)
+    ax2.set_ylim(0, 95)
 
-    plt.suptitle('Optimizer Convergence Analysis: All Optimizers Working Correctly!',
+    plt.suptitle('Optimizer Convergence Analysis: BN+Adam+LR achieves best accuracy!',
                 fontsize=16, fontweight='bold', y=1.02)
 
     plt.tight_layout()
@@ -253,6 +256,13 @@ def create_summary_table(data_dict):
 
     print("="*80 + "\n")
 
+def load_output_file(path):
+    """Load training output from a file, return empty string if not found."""
+    try:
+        return Path(path).read_text()
+    except FileNotFoundError:
+        return ""
+
 def main():
     """
     Main function to generate all visualizations.
@@ -261,87 +271,19 @@ def main():
     print("CUDA MLP Training Visualization")
     print("="*80 + "\n")
 
-    # Real data from actual CUDA training runs (October 2025)
-    # Configuration: 2 layers × 128 neurons, batch size 2048, 20 epochs
-
-    sgd_output = """
-Epoch 0: Train 0.10450, Val 0.09733, Test 0.10170
-Epoch 1: Train 0.14170, Val 0.13525, Test 0.13380  Average time per epoch: 0.000000 sec
-Epoch 2: Train 0.19530, Val 0.18592, Test 0.17930  Average time per epoch: inf sec
-Epoch 3: Train 0.26640, Val 0.26433, Test 0.25450  Average time per epoch: 0.835749 sec
-Epoch 4: Train 0.35490, Val 0.34892, Test 0.34360  Average time per epoch: 0.626687 sec
-Epoch 5: Train 0.41510, Val 0.41517, Test 0.40090  Average time per epoch: 0.557106 sec
-Epoch 6: Train 0.47600, Val 0.47492, Test 0.46470  Average time per epoch: 0.522303 sec
-Epoch 7: Train 0.51830, Val 0.51608, Test 0.50480  Average time per epoch: 0.500890 sec
-Epoch 8: Train 0.56010, Val 0.55750, Test 0.54670  Average time per epoch: 0.486574 sec
-Epoch 9: Train 0.59680, Val 0.59825, Test 0.58620  Average time per epoch: 0.476406 sec
-Epoch 10: Train 0.61580, Val 0.62067, Test 0.60730  Average time per epoch: 0.468790 sec
-Epoch 11: Train 0.63830, Val 0.64567, Test 0.63420  Average time per epoch: 0.462847 sec
-Epoch 12: Train 0.65480, Val 0.66233, Test 0.65680  Average time per epoch: 0.458052 sec
-Epoch 13: Train 0.66830, Val 0.67708, Test 0.67280  Average time per epoch: 0.454150 sec
-Epoch 14: Train 0.68860, Val 0.69742, Test 0.69460  Average time per epoch: 0.450907 sec
-Epoch 15: Train 0.69380, Val 0.70592, Test 0.69680  Average time per epoch: 0.448161 sec
-Epoch 16: Train 0.71040, Val 0.71600, Test 0.71570  Average time per epoch: 0.445801 sec
-Epoch 17: Train 0.72000, Val 0.72983, Test 0.72300  Average time per epoch: 0.443778 sec
-Epoch 18: Train 0.72720, Val 0.73258, Test 0.73220  Average time per epoch: 0.441997 sec
-Epoch 19: Train 0.73450, Val 0.74508, Test 0.74010  Average time per epoch: 0.440426 sec
-Epoch 20: Train 0.74470, Val 0.75392, Test 0.74880  Average time per epoch: 0.439015 sec
-    """
-
-    momentum_output = """
-Epoch 0: Train 0.10450, Val 0.09733, Test 0.10170
-Epoch 1: Train 0.14170, Val 0.13525, Test 0.13380  Average time per epoch: 0.000000 sec
-Epoch 2: Train 0.24750, Val 0.24842, Test 0.23390  Average time per epoch: inf sec
-Epoch 3: Train 0.39370, Val 0.40833, Test 0.38870  Average time per epoch: 0.824435 sec
-Epoch 4: Train 0.53880, Val 0.54950, Test 0.53380  Average time per epoch: 0.618314 sec
-Epoch 5: Train 0.62260, Val 0.63133, Test 0.61350  Average time per epoch: 0.549619 sec
-Epoch 6: Train 0.66340, Val 0.66558, Test 0.66450  Average time per epoch: 0.515542 sec
-Epoch 7: Train 0.69490, Val 0.69258, Test 0.69690  Average time per epoch: 0.495129 sec
-Epoch 8: Train 0.72020, Val 0.71975, Test 0.72100  Average time per epoch: 0.481559 sec
-Epoch 9: Train 0.73920, Val 0.74558, Test 0.74410  Average time per epoch: 0.471850 sec
-Epoch 10: Train 0.74320, Val 0.75175, Test 0.74820  Average time per epoch: 0.464567 sec
-Epoch 11: Train 0.73360, Val 0.74625, Test 0.73770  Average time per epoch: 0.458918 sec
-Epoch 12: Train 0.71930, Val 0.73008, Test 0.72230  Average time per epoch: 0.454379 sec
-Epoch 13: Train 0.72060, Val 0.73567, Test 0.73410  Average time per epoch: 0.450671 sec
-Epoch 14: Train 0.74450, Val 0.75692, Test 0.75370  Average time per epoch: 0.447591 sec
-Epoch 15: Train 0.73330, Val 0.74367, Test 0.74090  Average time per epoch: 0.444988 sec
-Epoch 16: Train 0.69400, Val 0.70867, Test 0.70570  Average time per epoch: 0.442740 sec
-Epoch 17: Train 0.74630, Val 0.75700, Test 0.75550  Average time per epoch: 0.440797 sec
-Epoch 18: Train 0.75120, Val 0.75950, Test 0.75860  Average time per epoch: 0.439109 sec
-Epoch 19: Train 0.70840, Val 0.72258, Test 0.72050  Average time per epoch: 0.437609 sec
-Epoch 20: Train 0.73690, Val 0.74617, Test 0.74650  Average time per epoch: 0.436282 sec
-    """
-
-    adam_output = """
-Epoch 0: Train 0.10450, Val 0.09733, Test 0.10170
-Epoch 1: Train 0.27120, Val 0.28783, Test 0.28130  Average time per epoch: 0.000000 sec
-Epoch 2: Train 0.41630, Val 0.42833, Test 0.41050  Average time per epoch: inf sec
-Epoch 3: Train 0.55930, Val 0.56700, Test 0.55620  Average time per epoch: 0.808938 sec
-Epoch 4: Train 0.70280, Val 0.70983, Test 0.70360  Average time per epoch: 0.606963 sec
-Epoch 5: Train 0.78380, Val 0.78950, Test 0.78700  Average time per epoch: 0.539356 sec
-Epoch 6: Train 0.74500, Val 0.74475, Test 0.73850  Average time per epoch: 0.505695 sec
-Epoch 7: Train 0.74460, Val 0.74833, Test 0.74190  Average time per epoch: 0.485420 sec
-Epoch 8: Train 0.80170, Val 0.80567, Test 0.80500  Average time per epoch: 0.471880 sec
-Epoch 9: Train 0.79290, Val 0.79650, Test 0.79310  Average time per epoch: 0.462216 sec
-Epoch 10: Train 0.75290, Val 0.75775, Test 0.75480  Average time per epoch: 0.455129 sec
-Epoch 11: Train 0.72550, Val 0.73117, Test 0.72920  Average time per epoch: 0.449661 sec
-Epoch 12: Train 0.75810, Val 0.76017, Test 0.75520  Average time per epoch: 0.445268 sec
-Epoch 13: Train 0.78600, Val 0.79167, Test 0.78750  Average time per epoch: 0.441672 sec
-Epoch 14: Train 0.79100, Val 0.79817, Test 0.79090  Average time per epoch: 0.438666 sec
-Epoch 15: Train 0.79030, Val 0.79442, Test 0.78840  Average time per epoch: 0.436148 sec
-Epoch 16: Train 0.81700, Val 0.81433, Test 0.80710  Average time per epoch: 0.433987 sec
-Epoch 17: Train 0.84500, Val 0.84142, Test 0.83890  Average time per epoch: 0.432127 sec
-Epoch 18: Train 0.83750, Val 0.83917, Test 0.82960  Average time per epoch: 0.430489 sec
-Epoch 19: Train 0.82110, Val 0.82758, Test 0.81820  Average time per epoch: 0.429044 sec
-Epoch 20: Train 0.81050, Val 0.81942, Test 0.80800  Average time per epoch: 0.427752 sec
-    """
-
-    # Parse data
+    # Load data from actual output files (generated by ./cuda* 2 128 20 2048 <lr> 1 5 0)
+    # Configuration: 2 layers x 128 neurons, batch 2048, 20 epochs, MNIST
     data_dict = {
-        'SGD': parse_training_output(sgd_output),
-        'Momentum': parse_training_output(momentum_output),
-        'Adam': parse_training_output(adam_output)
+        'SGD':          parse_training_output(load_output_file('sgd_output.txt')),
+        'Momentum':     parse_training_output(load_output_file('momentum_output.txt')),
+        'Adam':         parse_training_output(load_output_file('adam_output.txt')),
+        'Adam+LR':      parse_training_output(load_output_file('adam_lr_output.txt')),
+        'BN+SGD':       parse_training_output(load_output_file('batchnorm_output.txt')),
+        'BN+Adam+LR':   parse_training_output(load_output_file('full_output.txt')),
     }
+
+    # Drop configs with no data
+    data_dict = {k: v for k, v in data_dict.items() if v['epochs']}
 
     # Generate plots
     print("Generating visualizations...")
