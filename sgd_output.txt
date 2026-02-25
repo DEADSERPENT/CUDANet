@@ -14,7 +14,7 @@ Validation split: 48000 training, 12000 validation samples
 Dataset: MNIST
 
 Epoch 0: Train 0.10450, Val 0.09733, Test 0.10170
-Epoch 5: Train 0.41510, Val 0.41517, Test 0.40090  Average time per epoch: 0.138374 sec
-Epoch 10: Train 0.61580, Val 0.62067, Test 0.60730  Average time per epoch: 0.115740 sec
-Epoch 15: Train 0.69380, Val 0.70592, Test 0.69680  Average time per epoch: 0.110638 sec
-Epoch 20: Train 0.74470, Val 0.75392, Test 0.74880  Average time per epoch: 0.107948 sec
+Epoch 5: Train 0.41510, Val 0.41517, Test 0.40090  Average time per epoch: 0.132034 sec
+Epoch 10: Train 0.61580, Val 0.62067, Test 0.60730  Average time per epoch: 0.111192 sec
+Epoch 15: Train 0.69380, Val 0.70592, Test 0.69680  Average time per epoch: 0.106306 sec
+Epoch 20: Train 0.74470, Val 0.75392, Test 0.74880  Average time per epoch: 0.103148 sec
