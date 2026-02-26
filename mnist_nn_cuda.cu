@@ -1180,7 +1180,7 @@ __host__ __device__ void forward_prop(float image[IMAGE_SIZE], float* weights, f
 // Now with shared memory optimization for weights and activations
 __global__ void evaluate_kernel(float* image_data, int* labels, float* weights,
  float* biases, int* correct_count, int num_images, int output_type,
- struct network_structure ns){
+ struct network_structure ns, float* global_a, float* global_z){
 
 	// Allocate shared memory for cooperative loading
 	__shared__ float shared_weights[TILE_SIZE * TILE_SIZE];
@@ -1190,9 +1190,9 @@ __global__ void evaluate_kernel(float* image_data, int* labels, float* weights,
 	int tid = threadIdx.x;
 
 	if (id < num_images){
-		// Allocate per-thread memory on stack (fast!)
-		float z[1024];
-		float a[1024];
+		// Use global VRAM buffers - avoids register/stack blowout on large images
+		float* z = &global_z[id * ns.num_nodes];
+		float* a = &global_a[id * ns.num_nodes];
 
 		// Get image for this thread
 		float* image = &image_data[IMAGE_SIZE * id];
@@ -1264,15 +1264,21 @@ __host__ float evaluate_gpu(float* image_d, int* label_d, int num_images,
 	cudaMalloc((void**)&correct_d, sizeof(int));
 	cudaMemcpy(correct_d, &correct_h, sizeof(int), cudaMemcpyHostToDevice);
 
-	// Launch kernel with many threads in parallel!
+	// Allocate per-thread a/z buffers in global VRAM (avoids kernel stack blowout)
+	float *global_a, *global_z;
+	cudaMalloc((void**)&global_a, (size_t)num_images * ns.num_nodes * sizeof(float));
+	cudaMalloc((void**)&global_z, (size_t)num_images * ns.num_nodes * sizeof(float));
+
 	int nthreads = 256;
 	int nblocks = (num_images + nthreads - 1) / nthreads;
 
 	evaluate_kernel<<<nblocks, nthreads>>>(image_d, label_d, weights_d,
-		biases_d, correct_d, num_images, output_type, ns);
+		biases_d, correct_d, num_images, output_type, ns, global_a, global_z);
 
 	cudaMemcpy(&correct_h, correct_d, sizeof(int), cudaMemcpyDeviceToHost);
 	cudaFree(correct_d);
+	cudaFree(global_a);
+	cudaFree(global_z);
 
 	return ((float)correct_h / num_images);
 }
@@ -1954,6 +1960,8 @@ int main(const int argc, const char** argv){
 	int num_val = 0;
 	int num_train_actual = NUM_TRAIN;
 #endif
+	// Number of mini-batches per epoch - ensures all training data is seen each epoch
+	int num_batches = (num_train_actual > nb) ? (num_train_actual / nb) : 1;
 
 	printf("Dataset: %s\n\n", DATASET_NAME);
 
@@ -1990,6 +1998,10 @@ int main(const int argc, const char** argv){
 			else printf("\n");
 		}
 
+		/* --- main part --- */
+		cudaEventRecord( start_device, 0 ); // record cuda start time
+
+		for (int b = 0; b < num_batches; b++) {
 		// prepare batch - only sample from training portion (not validation)
 		for (int s=0; s<nb; s++){
 			float x = ((float)rand()/RAND_MAX) * num_train_actual;
@@ -2008,9 +2020,6 @@ int main(const int argc, const char** argv){
 		cudaMemset(grad_w_d, 0, num_weights*sizeof(float));
 		cudaMemset(grad_b_d, 0, num_biases*sizeof(float));
 #endif
-
-		/* --- main part --- */
-		cudaEventRecord( start_device, 0 ); // record cuda start time
 
 #if USE_BATCH_NORM
 		// ----------------------------------------------------------------
@@ -2211,6 +2220,8 @@ int main(const int argc, const char** argv){
 #endif
 
 #endif // USE_BATCH_NORM / USE_TENSOR_CORES / standard
+
+		} // end inner batch loop (num_batches per epoch)
 
 		cudaEventRecord( stop_device, 0 ); // record cuda finish time
 		cudaEventSynchronize( stop_device );

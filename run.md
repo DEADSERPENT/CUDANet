@@ -112,55 +112,65 @@ Expected: only warnings (no errors).
 
 ## 6. Run All Training Configurations
 
-### 6.1 Baseline — SGD  (74.88%)
+> **Note:** With the inner batch loop fix, each epoch now processes all ~60,000
+> training samples (~29 mini-batches of 2048). Epoch time is ~29× longer than
+> single-batch mode, but accuracy is significantly higher.
+> Use `log_interval=1` so every epoch is logged — required for full visualisation.
+
+### 6.1 Baseline — SGD
 ```bash
-./cuda 2 128 20 2048 0.1 1 5 0 | tee sgd_output.txt
+stdbuf -oL ./cuda 2 128 20 2048 0.1 1 1 0 | tee sgd_output.txt
 ```
 
-### 6.2 Momentum  (74.65%)
+### 6.2 Momentum
 ```bash
-./cuda_momentum 2 128 20 2048 0.1 1 5 0 | tee momentum_output.txt
+stdbuf -oL ./cuda_momentum 2 128 20 2048 0.1 1 1 0 | tee momentum_output.txt
 ```
 
-### 6.3 Adam  (80.80%)
+### 6.3 Adam
 ```bash
-./cuda_adam 2 128 20 2048 0.01 1 5 0 | tee adam_output.txt
+stdbuf -oL ./cuda_adam 2 128 20 2048 0.01 1 1 0 | tee adam_output.txt
 ```
 
-### 6.4 Adam + LR Scheduling  (82.16%)
+### 6.4 Adam + LR Scheduling
 ```bash
-./cuda_adam_lr 2 128 20 2048 0.01 1 5 0 | tee adam_lr_output.txt
+stdbuf -oL ./cuda_adam_lr 2 128 20 2048 0.01 1 1 0 | tee adam_lr_output.txt
 ```
 
-### 6.5 SGD + LR Scheduling  (71.80%)
+### 6.5 SGD + LR Scheduling
 ```bash
-./cuda_lr_schedule 2 128 20 2048 0.1 1 1 0 | tee lr_schedule_output.txt
+stdbuf -oL ./cuda_lr_schedule 2 128 20 2048 0.1 1 1 0 | tee lr_schedule_output.txt
 ```
 
-### 6.6 Batch Normalisation + SGD  (60.68%)
+### 6.6 Batch Normalisation + SGD
 ```bash
-./cuda_batchnorm 2 128 20 2048 0.1 1 5 0 | tee batchnorm_output.txt
+stdbuf -oL ./cuda_batchnorm 2 128 20 2048 0.1 1 1 0 | tee batchnorm_output.txt
 ```
 
-### 6.7 BN + Adam + LR Scheduling — Best Config  (85.64%)
+### 6.7 BN + Adam + LR Scheduling — Best Config
 ```bash
-./cuda_full 2 128 20 2048 0.01 1 5 0 | tee full_output.txt
+stdbuf -oL ./cuda_full 2 128 20 2048 0.01 1 1 0 | tee full_output.txt
 ```
 
 ### 6.8 Serial CPU Baseline
 ```bash
-./serial 2 128 20 2048 0.1 1 5 0 | tee serial_output.txt
+stdbuf -oL ./serial 2 128 20 2048 0.1 1 1 0 | tee serial_output.txt
 ```
 
-### Run All in Parallel (GPU contention — sequential is more accurate for timing)
+### Run All Sequentially (recommended — avoids GPU contention, accurate timing)
+
+> **Important:** Use `stdbuf -oL` so each epoch line is flushed immediately.
+> Without it, C's stdio buffers all output and the file stays empty until the
+> program exits (looks like it is "stuck" but is actually running).
+> Each epoch takes ~3–4 s with the inner batch loop (full dataset per epoch).
+
 ```bash
-./cuda           2 128 20 2048 0.1  1 5 0 > sgd_output.txt     2>&1 &
-./cuda_momentum  2 128 20 2048 0.1  1 5 0 > momentum_output.txt 2>&1 &
-./cuda_adam      2 128 20 2048 0.01 1 5 0 > adam_output.txt     2>&1 &
-wait
-./cuda_adam_lr   2 128 20 2048 0.01 1 5 0 > adam_lr_output.txt  2>&1
-./cuda_full      2 128 20 2048 0.01 1 5 0 > full_output.txt     2>&1
-./cuda_batchnorm 2 128 20 2048 0.1  1 5 0 > batchnorm_output.txt 2>&1
+stdbuf -oL ./cuda           2 128 20 2048 0.1  1 1 0 | tee sgd_output.txt
+stdbuf -oL ./cuda_momentum  2 128 20 2048 0.1  1 1 0 | tee momentum_output.txt
+stdbuf -oL ./cuda_adam      2 128 20 2048 0.01 1 1 0 | tee adam_output.txt
+stdbuf -oL ./cuda_adam_lr   2 128 20 2048 0.01 1 1 0 | tee adam_lr_output.txt
+stdbuf -oL ./cuda_batchnorm 2 128 20 2048 0.1  1 1 0 | tee batchnorm_output.txt
+stdbuf -oL ./cuda_full      2 128 20 2048 0.01 1 1 0 | tee full_output.txt
 ```
 
 ---
@@ -169,26 +179,42 @@ wait
 
 Requires the `*_output.txt` files from step 6.
 
+### 7.1 Original 3 plots
+
 ```bash
 python3 visualize_training.py
 ```
 
-Produces three PNG files:
+Produces:
 ```
 training_accuracy_comparison.png    — accuracy curves for all optimizers
 training_time_comparison.png        — per-epoch timing bar chart
 optimizer_convergence_analysis.png  — early vs full-run convergence
 ```
 
-Expected summary printed to stdout:
+### 7.2 Advanced 7 plots (for conference paper)
+
+```bash
+python3 visualize_advanced.py
 ```
-Optimizer       Final Test Acc   Avg Time/Epoch
-SGD              74.88%           0.118s
-Momentum         74.65%           0.168s
-Adam             80.80%           0.171s
-Adam+LR          82.16%           0.169s
-BN+SGD           60.68%           0.206s
-BN+Adam+LR       85.64%           0.150s
+
+Produces:
+```
+fig4_bn_impact.png               — BN vs no-BN accuracy bar chart
+fig5_cpu_gpu_speedup.png         — CPU/GPU speedup breakdown (log scale)
+fig6_two_phase_fix.png           — before/after race-condition fix
+fig7_lr_schedule_effect.png      — Adam vs Adam+LR cosine schedule
+fig8_accuracy_speed_tradeoff.png — Pareto scatter: accuracy vs speed
+fig9_convergence_heatmap.png     — all-optimizer epoch heatmap
+fig10_epoch_gain.png             — per-epoch accuracy delta
+```
+
+### Files to upload to Overleaf (paper uses 4 figures):
+```
+training_accuracy_comparison.png   ← Fig 1
+fig5_cpu_gpu_speedup.png           ← Fig 2
+fig6_two_phase_fix.png             ← Fig 3
+fig4_bn_impact.png                 ← Fig 4
 ```
 
 ---

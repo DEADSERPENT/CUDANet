@@ -1,0 +1,30 @@
+Step 1 — Build all binaries (already done, but run if you did make clean):
+  make cuda_momentum cuda_adam cuda_adam_lr cuda_batchnorm cuda_full cuda_fashion cuda_fashion_full                                                    
+                                                                                                                                                     
+  ---                                                                                                                                                
+  Step 2 — Run all 6 MNIST training configs (one at a time, ~1–2 min each):                                                                          
+  stdbuf -oL ./cuda           2 128 20 2048 0.1  1 1 0 | tee sgd_output.txt
+  stdbuf -oL ./cuda_momentum  2 128 20 2048 0.1  1 1 0 | tee momentum_output.txt
+  stdbuf -oL ./cuda_adam      2 128 20 2048 0.01 1 1 0 | tee adam_output.txt
+  stdbuf -oL ./cuda_adam_lr   2 128 20 2048 0.01 1 1 0 | tee adam_lr_output.txt
+  stdbuf -oL ./cuda_batchnorm 2 128 20 2048 0.1  1 1 0 | tee batchnorm_output.txt
+  stdbuf -oL ./cuda_full      2 128 20 2048 0.01 1 1 0 | tee full_output.txt
+
+  ---
+  Step 3 — Run Fashion-MNIST configs (optional, for extra results):
+  stdbuf -oL ./cuda_fashion      2 128 20 2048 0.1  1 1 0 | tee fashion_sgd_output.txt
+  stdbuf -oL ./cuda_fashion_full 2 128 20 2048 0.01 1 1 0 | tee fashion_full_output.txt
+
+  ---
+  Step 4 — Generate all plots (after all output files exist):
+  source venv/bin/activate
+  python3 visualize_training.py
+  python3 visualize_advanced.py
+
+  ---
+  Step 5 — Upload to Overleaf:
+  main.tex
+  training_accuracy_comparison.png
+  fig4_bn_impact.png
+  fig5_cpu_gpu_speedup.png
+  fig6_two_phase_fix.png
