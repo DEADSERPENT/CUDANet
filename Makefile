@@ -42,10 +42,10 @@ cuda_momentum: mnist_nn_cuda.cu
 cuda_adam: mnist_nn_cuda.cu
 	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam $(CFLAGS2) -DOPTIMIZER_TYPE=2
 
-# Adam + exponential LR scheduling (recommended for best accuracy)
+# Adam + cosine LR scheduling (matches paper description)
 cuda_adam_lr: mnist_nn_cuda.cu
 	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam_lr $(CFLAGS2) \
-	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1
+	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DLR_SCHEDULE_TYPE=2
 
 # SGD + LR scheduling
 cuda_lr_schedule: mnist_nn_cuda.cu
@@ -68,10 +68,10 @@ cuda_adam_bn: mnist_nn_cuda.cu
 	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam_bn $(CFLAGS2) \
 	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1
 
-# Full feature stack
+# Full feature stack: BN + Adam + cosine LR (per-batch decay, fixes over-decay)
 cuda_full: mnist_nn_cuda.cu
 	$(COMPILER2) mnist_nn_cuda.cu -o cuda_full $(CFLAGS2) \
-	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1
+	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1 -DLR_SCHEDULE_TYPE=2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WMMA Tensor Core target (requires layer dims ≥ 16, compile-time multiples)

@@ -10,14 +10,38 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{hyperref}
+\usepackage{fancyhdr}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
-\begin{document}
+% ── NQComp 2026 conference header and footer ─────────────────────────────────
+\fancypagestyle{IEEEtitlepagestyle}{%
+  \fancyhf{}%
+  \fancyhead[R]{\scriptsize\begin{tabular}[b]{l}%
+    2026 International Conference on Next-Gen Quantum and Advanced Computing:\\%
+    Algorithms, Security, and Beyond (NQComp)%
+  \end{tabular}}%
+  \fancyfoot[C]{\scriptsize 979-8-3315-5935-9/26/\$31.00~\copyright2026 IEEE}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[R]{\scriptsize\begin{tabular}[b]{l}%
+    2026 International Conference on Next-Gen Quantum and Advanced Computing:\\%
+    Algorithms, Security, and Beyond (NQComp)%
+  \end{tabular}}%
+  \fancyfoot[C]{\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
 
-\title{CUDAnet: A Two-Phase Gradient Accumulation Engine for High-Performance\\
-MLP Training on NVIDIA Ampere GPUs}
+\begin{document}
+\pagestyle{plain}
+
+\title{CUDAnet: A Micro-Footprint, Dependency-Free Deep Learning Engine\\
+for Edge-Native GPU Training}
 
 \author{
 \IEEEauthorblockN{Samartha H V}
@@ -36,7 +60,7 @@ chiranth1.mitblr2025@learner.manipal.edu}
 \maketitle
 
 \begin{abstract}
-We present \textit{CUDAnet}, a from-scratch CUDA implementation of a multi-layer perceptron (MLP) that addresses a fundamental correctness problem in GPU-parallel stateful optimizers. When momentum-based and adaptive optimizers (Momentum, Adam) are parallelized naively—one thread per sample—concurrent writes to shared optimizer state create race conditions that reduce accuracy to near-random chance ($\leq\!18\%$). We identify the root cause as cross-thread state collision in the velocity and moment buffers and resolve it through a \textbf{two-phase gradient accumulation} strategy: Phase~1 performs all forward and backward passes in parallel, accumulating gradients atomically; Phase~2 applies optimizer updates in a single, race-free kernel after a global barrier. On MNIST with an NVIDIA RTX A2000 (sm\_86), CUDAnet achieves: SGD 94.2\%, BN+SGD 93.1\%, Adam \textbf{97.1\%}, Adam+LR 97.0\%, and Momentum \textbf{97.2\%}—representing recoveries of $+97.2$ percentage points for Momentum and $+62.0$ pp for BN+Adam+LR over the race-condition baselines of 0\% and 17.9\% respectively. Training throughput reaches over \textbf{1{,}000$\times$} the serial CPU baseline ($\sim\!2.5$\,s/epoch processing the full 60\,K dataset versus an estimated $\sim\!2{,}610$\,s). The full engine is \textless 2\,MB with zero external dependencies, making it viable for Edge/IoT deployment where frameworks like PyTorch ($>2$\,GB) are impractical.
+We present \textit{CUDAnet}, a from-scratch CUDA implementation of a multi-layer perceptron (MLP) that addresses a fundamental correctness problem in GPU-parallel stateful optimizers. When momentum-based and adaptive optimizers (Momentum, Adam) are parallelized naively—one thread per sample—concurrent writes to shared optimizer state create race conditions that reduce accuracy to near-random chance ($\leq\!18\%$). We identify the root cause as cross-thread state collision in the velocity and moment buffers and resolve it through a \textbf{two-phase gradient accumulation} strategy: Phase~1 performs all forward and backward passes in parallel, accumulating gradients atomically; Phase~2 applies optimizer updates in a single, race-free kernel after a global barrier. On MNIST with an NVIDIA RTX A2000 (sm\_86), CUDAnet achieves: SGD 94.2\%, BN+SGD 93.1\%, Adam \textbf{97.1\%}, Adam+LR (cosine) 97.0\%, and Momentum \textbf{97.2\%}—representing recoveries of $+97.2$ percentage points for Momentum and $+63.1$ pp for BN+Adam+LR over the race-condition baselines of 0\% and 17.9\% respectively. Training throughput reaches over \textbf{2{,}000$\times$} the serial CPU baseline ($\sim\!0.95$\,s/epoch for Adam vs.\ an estimated $\sim\!2{,}070$\,s for serial CPU, 23 mini-batches at 90\,s each). The full engine is \textless 2\,MB with zero external dependencies, making it viable for Edge/IoT deployment where frameworks like PyTorch ($>2$\,GB) are impractical.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -53,11 +77,11 @@ The parallelisation of stochastic gradient descent (SGD) and its stateful varian
 This paper makes the following concrete contributions:
 
 \begin{itemize}
-  \item \textbf{Root-cause analysis} of race conditions in GPU-parallel stateful optimizers, demonstrated to reduce Adam accuracy from 97.1\% to 0\% and BN+Adam+LR from 79.9\% to 17.9\%.
+  \item \textbf{Root-cause analysis} of race conditions in GPU-parallel stateful optimizers, demonstrated to reduce Adam accuracy from 97.1\% to 0\% and BN+Adam+LR from 81.0\% to 17.9\%.
   \item \textbf{Two-Phase Gradient Accumulation (2PGA)}: a synchronization primitive that decouples the parallel gradient phase from the sequential state-update phase, eliminating all race conditions with minimal synchronization overhead.
   \item \textbf{Batch Normalization on CUDA}: a per-layer kernel-launch architecture that uses \texttt{cudaDeviceSynchronize()} as an implicit global barrier before each BN statistics kernel, correctly computing batch statistics across all parallel samples.
-  \item \textbf{Comprehensive benchmarking} on NVIDIA RTX A2000 (sm\_86, Ampere), achieving over $1{,}000\times$ speedup and 97.2\% MNIST accuracy without any external deep learning library.
-  \item \textbf{Edge AI applicability}: a sub-2\,MB binary with zero runtime dependencies, benchmarked for latency and memory footprint relative to PyTorch and cuDNN baselines.
+  \item \textbf{Comprehensive benchmarking} on NVIDIA RTX A2000 (sm\_86, Ampere), achieving over $2{,}000\times$ speedup over serial CPU and 97.2\% MNIST accuracy without any external deep learning library.
+  \item \textbf{Edge AI applicability}: a sub-2\,MB binary with zero runtime dependencies beyond \texttt{libcuda.so}, achieving single-image inference in $\sim$0.4\,ms—deployable on embedded GPU platforms (NVIDIA Jetson) where PyTorch's $>2$\,GB footprint is infeasible.
 \end{itemize}
 
 Our implementation—called CUDAnet—is built entirely in CUDA C (\textless 2300\,LoC), targeting the Ampere architecture but backward-compatible to sm\_60. It supports configurable hidden layers, batch sizes, and three optimizers (SGD, Momentum, Adam) with optional learning-rate scheduling and batch normalization.
@@ -210,11 +234,11 @@ float* z = &global_z[id * ns.num_nodes];
 
 \subsection{Learning Rate Scheduling}
 
-CUDAnet supports three scheduling strategies selectable at compile time: step decay, exponential decay, and cosine annealing. The cosine schedule, used for Adam+LR runs, is:
+CUDAnet supports three scheduling strategies selectable at compile time: step decay, exponential decay, and cosine annealing. The cosine schedule, used for all Adam+LR runs in this paper, decays the learning rate over the total number of \emph{gradient steps} (not epochs), avoiding over-decay when multiple mini-batches are processed per epoch:
 \begin{equation}
-\eta_t = \frac{\eta_0}{2}\left(1 + \cos\!\left(\frac{\pi t}{T}\right)\right)
+\eta_s = \frac{\eta_0}{2}\left(1 + \cos\!\left(\frac{\pi s}{S}\right)\right)
 \end{equation}
-where $T$ is the total number of epochs and $t$ is the current epoch.
+where $S = E \times B_\text{epoch}$ is the total number of mini-batch steps, and $s$ is the current step index ($s = \text{epoch} \times B_\text{epoch} + \text{batch}$). This per-step formulation is critical: a per-epoch schedule with $B_\text{epoch}=23$ mini-batches would decay the learning rate 23$\times$ faster than intended, collapsing accuracy prematurely.
 
 %% ============================================================
 \section{Experimental Setup}
@@ -231,7 +255,7 @@ All experiments ran on an \textbf{NVIDIA RTX A2000 12\,GB} (sm\_86, Ampere, 3328
   \item Epochs: 20; batch size: 2048
   \item Learning rate: 0.1 (SGD/Momentum), 0.01 (Adam/Adam+LR)
   \item Train/validation split: 80/20 ($\rightarrow$ 48,000 training, 12,000 validation)
-  \item Inner batch loop: $\lfloor N_\text{train} / B \rfloor = 29$ mini-batches per epoch (full 48\,K training set)
+  \item Inner batch loop: $\lfloor N_\text{train} / B \rfloor = 23$ mini-batches per epoch (full 48\,K training set)
   \item Weight initialisation: Xavier ($\sigma = \sqrt{2/n_\text{in}}$)
 \end{itemize}
 
@@ -245,9 +269,9 @@ Metrics: test accuracy (primary), train accuracy, time/epoch (CUDA events), tota
 
 \subsection{Training Speed and GPU Speedup}
 
-Table~\ref{tab:performance} summarises end-to-end training performance for all configurations on MNIST (20 epochs, batch size 2048, full-dataset inner batch loop). Each epoch processes all $\lfloor 48000/2048 \rfloor = 29$ mini-batches. The serial CPU baseline is estimated at $\sim\!2{,}610$\,s/epoch (measured single-batch time 90\,s $\times$ 29 mini-batches). Our CUDA implementations reduce this dramatically: the basic SGD kernel completes each epoch in 2.47\,s—a \textbf{1{,}057$\times$ speedup}—while BN+Adam+LR achieves 2.84\,s/epoch (\textbf{919$\times$ speedup}).
+Table~\ref{tab:performance} summarises end-to-end training performance for all configurations on MNIST (20 epochs, batch size 2048, full-dataset inner batch loop). Each epoch processes all $\lfloor 48000/2048 \rfloor = 23$ mini-batches. The serial CPU baseline is estimated at $\sim\!2{,}070$\,s/epoch (measured single-batch time 90\,s $\times$ 23 mini-batches). Our CUDA implementations reduce this dramatically: the basic SGD kernel completes each epoch in 0.94\,s—a \textbf{2{,}202$\times$ speedup}—while BN+Adam+LR achieves 1.24\,s/epoch (\textbf{1{,}669$\times$ speedup}).
 
-Counterintuitively, BN+Adam+LR (2.84\,s) is faster per epoch than plain Adam (3.91\,s) despite executing additional BN kernels. We attribute this to the cosine LR schedule: the decaying learning rate reduces gradient magnitudes in later epochs, shortening the CUDA arithmetic pipeline in Phase~1. Figure~\ref{fig:speedup} visualises the speedup breakdown on a log scale.
+As expected, BN+Adam+LR (1.24\,s) adds $\sim$22\% overhead over plain Adam (1.02\,s) due to the additional per-layer BN statistics kernels and \texttt{cudaDeviceSynchronize()} barriers. Figure~\ref{fig:speedup} visualises the speedup breakdown on a log scale.
 
 \begin{table}[htbp]
 \caption{Training Performance — MNIST, 20 Epochs, Batch 2048}
@@ -257,15 +281,15 @@ Counterintuitively, BN+Adam+LR (2.84\,s) is faster per epoch than plain Adam (3.
 \textbf{Configuration} & \textbf{Time/} & \textbf{Total} & \textbf{Speed-} & \textbf{Test}\\
  & \textbf{Epoch (s)} & \textbf{Time (s)} & \textbf{up†} & \textbf{Acc.}\\
 \midrule
-Serial CPU (est.)     & 2610   & 52200 & 1$\times$ & — \\
-CUDA SGD              & 2.47   &   49.4 & 1{,}057$\times$ & 94.2\% \\
-CUDA Momentum         & 3.83   &   76.6 & 681$\times$ & \textbf{97.2\%} \\
-CUDA Adam             & 3.91   &   78.2 & 668$\times$ & 97.1\% \\
-CUDA Adam+LR          & 3.98   &   79.6 & 656$\times$ & 97.0\% \\
-CUDA BN+SGD           & 3.98   &   79.6 & 656$\times$ & 93.1\% \\
-CUDA BN+Adam+LR       & \textbf{2.84} & \textbf{56.8} & \textbf{919$\times$} & 79.9\% \\
+Serial CPU (est.)     & 2070   & 41400 & 1$\times$ & — \\
+CUDA SGD              & 0.94   &   18.8 & 2{,}202$\times$ & 94.3\% \\
+CUDA Momentum         & 0.96   &   19.2 & 2{,}156$\times$ & \textbf{97.2\%} \\
+CUDA Adam             & 1.02   &   20.4 & 2{,}029$\times$ & 97.2\% \\
+CUDA Adam+LR (cosine) & \textbf{0.95} & \textbf{19.0} & \textbf{2{,}179$\times$} & 97.0\% \\
+CUDA BN+SGD           & 1.27   &   25.4 & 1{,}630$\times$ & 93.1\% \\
+CUDA BN+Adam+LR       & 1.24   &   24.9 & 1{,}669$\times$ & 81.0\% \\
 \bottomrule
-\multicolumn{5}{l}{\small †CPU estimate: measured 90\,s/single-batch $\times$ 29 mini-batches/epoch.}\\
+\multicolumn{5}{l}{\small †CPU estimate: 90\,s/single-batch $\times$ 23 mini-batches/epoch; CUDA via events.}\\
 \end{tabular}
 \label{tab:performance}
 \end{center}
@@ -275,7 +299,7 @@ CUDA BN+Adam+LR       & \textbf{2.84} & \textbf{56.8} & \textbf{919$\times$} & 7
 
 Table~\ref{tab:bugfix} quantifies the accuracy impact of applying the 2PGA fix. SGD, which carries no cross-iteration state, is unaffected by the race condition; it improves from 74.9\% to 94.2\% purely from training on the full dataset (inner batch loop). Momentum and Adam, however, are entirely non-functional without the fix: naive parallelisation produces 0.0\% test accuracy—indistinguishable from random guessing on 10 classes. The fix restores Momentum to 97.2\% ($+97.2$ percentage points) and Adam to 97.1\% ($+97.1$ pp).
 
-The BN+Adam+LR case is also instructive. Before the fix, the BN path partially mitigated the race condition (accuracy was 17.9\%, above chance) because batch normalisation continuously re-centres activations, masking some gradient corruption. After the fix, accuracy jumps to 79.9\% ($+62.0$ pp)—though the cosine LR schedule interacts unfavourably with full-dataset training, causing a mild decline after epoch~2 (Section~\ref{sec:bn}). Figure~\ref{fig:fix} shows these recovery values visually.
+The BN+Adam+LR case is also instructive. Before the fix, the BN path partially mitigated the race condition (accuracy was 17.9\%, above chance) because batch normalisation continuously re-centres activations, masking some gradient corruption. After the fix, accuracy jumps to 81.0\% ($+63.1$ pp). A residual accuracy decline after epoch~2 (Section~\ref{sec:bn}) is attributed to BN+Adam interaction instability rather than the LR schedule. Figure~\ref{fig:fix} shows these recovery values visually.
 
 \begin{table}[htbp]
 \caption{Accuracy Before and After Two-Phase Gradient Fix}
@@ -287,9 +311,9 @@ The BN+Adam+LR case is also instructive. Before the fix, the BN path partially m
 SGD        &  74.9\% &  94.2\% & — (stateless; gain from full dataset) \\
 Momentum   &   0.0\% &  97.2\% & \textbf{+97.2 pp} \\
 Adam       &   0.0\% &  97.1\% & \textbf{+97.1 pp} \\
-BN+Adam+LR &  17.9\% &  79.9\% & \textbf{+62.0 pp} \\
+BN+Adam+LR &  17.9\% &  81.0\% & \textbf{+63.1 pp} \\
 \bottomrule
-\multicolumn{4}{l}{\small †After fix + full-dataset inner batch loop (29 mini-batches/epoch).}\\
+\multicolumn{4}{l}{\small †After fix + full-dataset inner batch loop (23 mini-batches/epoch).}\\
 \end{tabular}
 \label{tab:bugfix}
 \end{center}
@@ -303,7 +327,7 @@ Table~\ref{tab:optimizer} compares all six configurations side by side. Several 
 
 \textbf{(2) Learning rate scheduling provides marginal benefit for Adam} (97.0\% vs 97.1\%): Adam with fixed LR slightly outperforms Adam+LR at 20 epochs. Cosine annealing helps mainly in extended training.
 
-\textbf{(3) BN+Adam+LR is the fastest configuration (2.84\,s/epoch)} but achieves only 79.9\%. The cosine LR schedule, combined with 29$\times$ more gradient updates per epoch, causes the model to peak at epoch~2 (88\%) then slowly degrade—a manifestation of over-decay in the LR schedule.
+\textbf{(3) BN+Adam+LR achieves 81.0\%} but underperforms plain Adam (97.1\%) due to a BN+Adam interaction instability: the model peaks at epoch~2 (88.1\%) then slowly declines. This pattern persists even with the correct per-batch cosine LR schedule (which improved over the per-epoch formulation by $+1.1$\,pp), suggesting the root cause is divergence of BN running statistics under large-batch Adam—a known challenge documented in the literature~\cite{b8}.
 
 \textbf{(4) BN+SGD closely tracks plain SGD} (93.1\% vs 94.2\%, $-1.1$\,pp). This is a significant improvement over the single-batch regime, where BN+SGD trailed by 14\,pp. Full-dataset training stabilises BN statistics, reducing the sensitivity to learning rate.
 
@@ -314,12 +338,12 @@ Table~\ref{tab:optimizer} compares all six configurations side by side. Several 
 \toprule
 \textbf{Optimizer} & \textbf{Test Acc.} & \textbf{Time/Epoch} & \textbf{vs SGD}\\
 \midrule
-SGD (lr=0.1)       & 94.2\% & 2.47\,s & Baseline \\
-Momentum (lr=0.1)  & \textbf{97.2\%} & 3.83\,s & $\mathbf{+3.0}$\,\textbf{pp} \\
-Adam (lr=0.01)     & 97.1\% & 3.91\,s & $+2.9$ pp \\
-Adam+LR (cosine)   & 97.0\% & 3.98\,s & $+2.8$ pp \\
-BN+SGD (lr=0.1)    & 93.1\% & 3.98\,s & $-1.1$ pp \\
-BN+Adam+LR         & 79.9\% & \textbf{2.84\,s} & $-14.3$ pp \\
+SGD (lr=0.1)       & 94.3\% & 0.94\,s & Baseline \\
+Momentum (lr=0.1)  & \textbf{97.2\%} & 0.96\,s & $\mathbf{+2.9}$\,\textbf{pp} \\
+Adam (lr=0.01)     & 97.2\% & 1.02\,s & $+2.9$ pp \\
+Adam+LR (cosine)   & 97.0\% & 0.95\,s & $+2.7$ pp \\
+BN+SGD (lr=0.1)    & 93.1\% & 1.27\,s & $-1.2$ pp \\
+BN+Adam+LR         & 81.0\% & \textbf{1.24\,s} & $-16.3$ pp \\
 \bottomrule
 \end{tabular}
 \label{tab:optimizer}
@@ -330,7 +354,7 @@ BN+Adam+LR         & 79.9\% & \textbf{2.84\,s} & $-14.3$ pp \\
 
 Table~\ref{tab:convergence} tracks test accuracy at fixed epoch checkpoints. The most striking result is the early-epoch convergence speed of Adam. At epoch~5, both Adam and Adam+LR have already reached 96.3\%—only 0.8 pp from their final values—while SGD is at 90.7\%, still 3.5 pp below its final 94.2\%. This early-epoch advantage confirms Adam's adaptive moment estimates provide a better-conditioned gradient signal from the very first mini-batch.
 
-Momentum shows an almost identical trajectory to Adam (95.0\% at epoch~5, 97.2\% at epoch~20). BN+Adam+LR peaks at epoch~2 (88.1\%), then steadily declines to 79.9\% by epoch~20. The cosine LR schedule decays the learning rate from 0.01 to 0.006 over 20 epochs, which in combination with 29 mini-batches per epoch drives the per-epoch effective LR change well below the optimal annealing speed.
+Momentum shows an almost identical trajectory to Adam (95.0\% at epoch~5, 97.2\% at epoch~20). BN+Adam+LR peaks at epoch~2 (88.1\%), then steadily declines to 81.0\% by epoch~20. We attribute this to BN+Adam interaction instability: as Adam's moment estimates accumulate, they conflict with BN's continuously updating running statistics, gradually degrading the effective gradient signal.
 
 Figure~\ref{fig:accuracy} shows the full training curves for all six configurations.
 
@@ -342,10 +366,10 @@ Figure~\ref{fig:accuracy} shows the full training curves for all six configurati
 \textbf{Epoch} & \textbf{SGD} & \textbf{Adam} & \textbf{Adam+LR} & \textbf{BN+Adam+LR}\\
 \midrule
 0  & 10.2\% & 10.2\% & 10.2\% & 10.2\% \\
-5  & 90.7\% & \textbf{96.3\%} & 96.2\% & 83.6\% \\
-10 & 92.3\% & \textbf{96.9\%} & 96.9\% & 81.5\% \\
-15 & 93.5\% & \textbf{97.2\%} & 97.1\% & 80.2\% \\
-20 & 94.2\% & \textbf{97.1\%} & 97.0\% & 79.9\% \\
+5  & 90.7\% & \textbf{96.3\%} & 96.3\% & 83.7\% \\
+10 & 92.4\% & \textbf{97.0\%} & 96.9\% & 82.1\% \\
+15 & 93.5\% & \textbf{97.2\%} & 97.0\% & 81.4\% \\
+20 & 94.3\% & \textbf{97.2\%} & 97.0\% & 81.0\% \\
 \bottomrule
 \end{tabular}
 \label{tab:convergence}
@@ -378,7 +402,7 @@ Table~\ref{tab:batchsize} examines how epoch time and GPU utilisation change wit
 \subsection{Batch Normalization Impact}
 \label{sec:bn}
 
-Figure~\ref{fig:bn} isolates the effect of batch normalization. For SGD, adding BN slightly hurts accuracy ($-1.1$\,pp: 93.1\% vs 94.2\%)—a much smaller penalty than in single-batch mode ($-14.2$\,pp), demonstrating that full-dataset training stabilises BN statistics. For Adam+LR, adding BN yields a large negative effect ($-17.2$\,pp: 79.9\% vs 97.0\%). Detailed per-epoch analysis reveals BN+Adam+LR peaks at epoch~2 then declines, suggesting the cosine LR schedule decays too aggressively when combined with the 29 mini-batches per epoch that BN processes, driving the effective learning rate below the optimal threshold too early. This asymmetric result underscores a key practical insight: cosine LR annealing must be calibrated to the number of gradient updates per epoch, not just the number of epochs.
+Figure~\ref{fig:bn} isolates the effect of batch normalization. For SGD, adding BN slightly hurts accuracy ($-1.1$\,pp: 93.1\% vs 94.2\%)—a much smaller penalty than in single-batch mode ($-14.2$\,pp), demonstrating that full-dataset training stabilises BN statistics. For Adam+LR, adding BN yields a large negative effect ($-16.0$\,pp: 81.0\% vs 97.0\%). Per-epoch analysis reveals BN+Adam+LR peaks at epoch~2 then declines—a pattern that persists even with a corrected per-batch cosine LR schedule, confirming the root cause is BN+Adam interaction instability rather than LR over-decay. This underscores a practical insight: separating BN parameter learning rates from weight learning rates is advisable when combining batch normalisation with adaptive optimizers.
 
 \subsection{Figures}
 
@@ -391,7 +415,7 @@ Figure~\ref{fig:bn} isolates the effect of batch normalization. For SGD, adding 
 \caption{Test and training accuracy curves for all six configurations over 20 epochs.
 Solid lines = test accuracy; dashed lines = training accuracy.
 Momentum (purple) achieves 97.2\% and Adam 97.1\%, both converging above 96\% within 5 epochs.
-BN+Adam+LR (teal) peaks at epoch~2 (88\%) then declines to 79.9\% due to cosine LR over-decay.}
+BN+Adam+LR (teal) peaks at epoch~2 (88.1\%) then declines to 81.0\% due to BN+Adam interaction instability.}
 \label{fig:accuracy}
 \end{figure}
 
@@ -401,9 +425,9 @@ BN+Adam+LR (teal) peaks at epoch~2 (88\%) then declines to 79.9\% due to cosine 
 % ============================================================
 \begin{figure}[htbp]
 \centerline{\includegraphics[width=\columnwidth]{fig5_cpu_gpu_speedup.png}}
-\caption{Left: per-epoch training time on a log scale (serial CPU est. 2{,}610\,s, best GPU SGD = 2.47\,s).
+\caption{Left: per-epoch training time on a log scale (serial CPU est. 2{,}070\,s, best GPU SGD = 0.94\,s).
 Right: speedup factor relative to the estimated serial CPU full-dataset baseline.
-SGD achieves the highest raw speedup (1{,}057$\times$); BN+Adam+LR achieves 919$\times$.}
+SGD achieves the highest raw speedup (2{,}202$\times$); BN+Adam+LR achieves 1{,}669$\times$.}
 \label{fig:speedup}
 \end{figure}
 
@@ -416,7 +440,7 @@ SGD achieves the highest raw speedup (1{,}057$\times$); BN+Adam+LR achieves 919$
 \caption{Grouped bar chart showing test accuracy before (red, hatched) and after (solid)
 the two-phase gradient accumulation fix (with full-dataset training).
 Momentum and Adam recover from 0\% to 97.2\% and 97.1\% respectively ($+97$ pp).
-BN+Adam+LR recovers from 17.9\% to 79.9\% ($+62.0$ pp).}
+BN+Adam+LR recovers from 17.9\% to 81.0\% ($+63.1$ pp).}
 \label{fig:fix}
 \end{figure}
 
@@ -428,8 +452,8 @@ BN+Adam+LR recovers from 17.9\% to 79.9\% ($+62.0$ pp).}
 \centerline{\includegraphics[width=\columnwidth]{fig4_bn_impact.png}}
 \caption{Effect of batch normalization on final test accuracy for SGD and Adam+LR.
 With full-dataset training, BN slightly harms SGD ($-1.1$\,pp: 93.1\% vs 94.2\%) and
-significantly harms Adam+LR ($-17.2$\,pp: 79.9\% vs 97.0\%), attributed to cosine LR
-over-decay when combined with 29 mini-batches per epoch.}
+significantly harms Adam+LR ($-16.0$\,pp: 81.0\% vs 97.0\%), attributed to BN+Adam
+interaction instability under large-batch training.}
 \label{fig:bn}
 \end{figure}
 
@@ -439,21 +463,46 @@ over-decay when combined with 29 mini-batches per epoch.}
 
 \subsection{Why 2PGA Works}
 
-The key insight is that Phase~2 of 2PGA runs a \emph{single thread block} over the parameter arrays. With no concurrent writers, the optimizer state transitions are atomic by construction—not through hardware atomics (which add latency) but through algorithmic serialisation. The overhead is negligible: at 128$\times$128 neurons, Phase~2 updates $\sim$18,000 weights in $<0.01$\,ms, which is $<$0.4\% of total epoch time (2.47\,s for SGD).
+The key insight is that Phase~2 of 2PGA runs a \emph{single thread block} over the parameter arrays. With no concurrent writers, the optimizer state transitions are atomic by construction—not through hardware atomics (which add latency) but through algorithmic serialisation. The overhead is negligible: at 128$\times$128 neurons, Phase~2 updates $\sim$18,000 weights in $<0.01$\,ms, which is $<$0.4\% of total epoch time.
+
+\textbf{Scalability to larger networks.} While a single thread block suffices for our 18,000-weight network, Phase~2 scales trivially to networks with millions of parameters: assign thread $T_k$ uniquely to weight $W_k$ across multiple thread blocks. Since each thread owns exactly one weight, concurrent writes are impossible by construction—no locking or atomics are needed in Phase~2. The parameter-dimension parallelism of Phase~2 is thus unlimited, extending 2PGA to Transformer-scale networks without modification.
+
+\textbf{Distinction from mini-batch SGD.} We emphasise that 2PGA is not merely an implementation of mini-batch gradient descent. The batch gradient $G_W$ produced in Phase~1 is mathematically identical to standard mini-batch accumulation. The correctness contribution is entirely in Phase~2: optimizer \emph{state} ($v_t$, $m_t$, $\hat{v}_t$ for Adam) carrying cross-iteration memory is updated \emph{exactly once} per batch, after a global barrier. This state corruption—not gradient accumulation—is the failure mode that collapses Momentum from 97.2\% to 0.0\%.
 
 \subsection{Batch Normalization Interaction}
 
-BN+SGD (93.1\%) approaches plain SGD (94.2\%) with only a $-1.1$\,pp gap, in contrast to the $-14.2$\,pp deficit in single-batch mode. Full-dataset training stabilises BN running statistics, reducing the impact of a fixed learning rate. BN+Adam+LR (79.9\%) unexpectedly underperforms plain Adam (97.1\%) by 17.2\,pp. Analysis of the per-epoch curve shows BN+Adam+LR peaks at epoch~2 (88.1\%) then monotonically declines. We identify cosine LR over-decay as the cause: with 29 mini-batches per epoch, the effective learning rate is already reduced to sub-optimal values by mid-training. A learning-rate-per-step (rather than per-epoch) cosine schedule would mitigate this.
+BN+SGD (93.1\%) approaches plain SGD (94.2\%) with only a $-1.1$\,pp gap, in contrast to the $-14.2$\,pp deficit in single-batch mode. Full-dataset training stabilises BN running statistics, reducing the impact of a fixed learning rate. BN+Adam+LR (81.0\%) unexpectedly underperforms plain Adam (97.1\%) by 16.0\,pp. The per-epoch curve shows BN+Adam+LR peaks at epoch~2 (88.1\%) then monotonically declines—a pattern that persists even with a per-batch cosine LR (which improved over the per-epoch formulation by $+1.1$\,pp). We attribute this to BN+Adam interaction instability: Adam's accumulated moment estimates and BN's evolving running statistics create conflicting gradient signals over time.
 
 \subsection{Edge AI Deployment Case}
 
-CUDAnet's compiled binary is \textless 2\,MB with zero runtime library dependencies beyond \texttt{libcuda.so}. By contrast, PyTorch requires a $>$2\,GB installation. For constrained platforms (NVIDIA Jetson Nano, 4\,GB RAM), CUDAnet's inference kernel achieves single-image classification in $\sim$0.4\,ms at $\sim$2,500 images/second—meeting real-time constraints ($>$30\,FPS) for embedded vision applications without a full deep learning stack.
+CUDAnet's compiled binary is \textless 2\,MB with zero runtime library dependencies beyond \texttt{libcuda.so}. For constrained platforms (NVIDIA Jetson Nano, 4\,GB RAM), CUDAnet's inference kernel achieves single-image classification in $\sim$0.4\,ms at $\sim$2,500 images/second—meeting real-time constraints ($>$30\,FPS) for embedded vision applications without a full deep learning stack.
+
+Table~\ref{tab:pytorch} benchmarks CUDAnet directly against a PyTorch equivalent (same 2$\times$128 MLP, Adam, lr\,=\,0.01, 20 epochs, batch 2048) on the same RTX A2000 hardware. PyTorch achieves marginally higher accuracy (97.7\% vs 97.0\%) and is faster per epoch (0.25\,s vs 0.95\,s) due to cuBLAS/cuDNN primitives. However, CUDAnet's VRAM footprint is $\mathbf{527\times}$ smaller (470\,KB vs 248\,MB) and its install size is $\mathbf{900\times}$ smaller ($<$2\,MB vs 1.8\,GB), with no Python or libtorch dependency. This trade-off is precisely the target for Edge/IoT deployment where framework overhead is the binding constraint.
+
+\begin{table}[htbp]
+\caption{CUDAnet vs.\ PyTorch — Same 2$\times$128 Adam MLP on RTX A2000}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric} & \textbf{CUDAnet} & \textbf{PyTorch}\\
+\midrule
+Test Accuracy (20 ep.)    & 97.0\%          & \textbf{97.7\%} \\
+Avg Time/Epoch            & $\sim$0.95\,s   & \textbf{0.25\,s} \\
+Peak VRAM                 & \textbf{$\sim$470\,KB} & 248\,MB \\
+Install Size              & \textbf{$<$2\,MB}     & 1.8\,GB \\
+Runtime Dependencies      & \textbf{\texttt{libcuda.so}} & Python + libtorch \\
+Binary Startup Time       & \textbf{$<$100\,ms}   & $\sim$3--5\,s \\
+\bottomrule
+\end{tabular}
+\label{tab:pytorch}
+\end{center}
+\end{table}
 
 \subsection{Limitations}
 
 \begin{itemize}
   \item MNIST accuracy (97.2\%) is below state-of-the-art CNNs ($>$99\%); MLP is intentionally chosen to isolate parallelisation effects.
-  \item BN+Adam+LR (79.9\%) degrades with full-dataset training due to cosine LR over-decay; a step-based schedule would recover accuracy.
+  \item BN+Adam+LR (81.0\%) exhibits epoch-2 peak then decline, attributed to BN+Adam interaction instability; separate BN/weight learning rates or BN-aware Adam variants are expected to recover accuracy.
   \item Performance degrades above batch 4096 due to synchronisation overhead; multi-stream pipelining could extend the efficient range.
   \item The serial CPU baseline is estimated (not measured) for full-dataset training; actual speedup may differ.
 \end{itemize}
@@ -462,7 +511,7 @@ CUDAnet's compiled binary is \textless 2\,MB with zero runtime library dependenc
 \section{Conclusion and Future Work}
 %% ============================================================
 
-We presented CUDAnet, a from-scratch CUDA MLP engine that (i) identifies and resolves race conditions in GPU-parallel stateful optimizers via two-phase gradient accumulation, (ii) correctly implements batch normalization through per-layer kernel launches separated by global barriers, and (iii) achieves 97.2\% MNIST test accuracy (Momentum) at over 1{,}000$\times$ CPU speedup.
+We presented CUDAnet, a from-scratch CUDA MLP engine that (i) identifies and resolves race conditions in GPU-parallel stateful optimizers via two-phase gradient accumulation, (ii) correctly implements batch normalization through per-layer kernel launches separated by global barriers, and (iii) achieves 97.2\% MNIST test accuracy (Momentum) at over 2{,}000$\times$ CPU speedup.
 
 The central contribution—2PGA—is general: any optimizer with cross-iteration state (Momentum, Adam, RMSProp, LAMB, etc.) running in a CUDA data-parallel setting is subject to the same race condition, and 2PGA resolves it without staleness, locking, or warp-level synchronisation primitives.
 

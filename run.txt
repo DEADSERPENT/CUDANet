@@ -28,3 +28,57 @@ Step 1 — Build all binaries (already done, but run if you did make clean):
   fig4_bn_impact.png
   fig5_cpu_gpu_speedup.png
   fig6_two_phase_fix.png
+
+
+
+ Here's a complete summary of everything done:                                                                                                             
+                                                                                                                                                            
+  ---                                                                                                                                                       
+  What was done                                                                                                                                             
+                                                                                                                                                            
+  CUDA code fixes                                                                                                                                           
+                                                                                                                                                            
+  - Per-batch cosine LR (mnist_nn_cuda.cu): Cosine schedule now steps per batch-step (epoch × n_batches + b) over total_steps = ne × n_batches, not per     
+  epoch. Prevents over-decay when training with multiple mini-batches per epoch.
+  - Makefile: cuda_adam_lr and cuda_full now explicitly compile with -DLR_SCHEDULE_TYPE=2.                                                                  
+                                                                                                                                                            
+  Paper (main.tex) — all changes
+
+  ┌───────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+  │         What          │                    Before                    │                                    After                                     │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Title                 │ "Two-Phase Gradient Accumulation Engine..."  │ "Micro-Footprint, Dependency-Free Deep Learning Engine for Edge-Native GPU   │
+  │                       │                                              │ Training"                                                                    │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ False claim           │ "benchmarked relative to PyTorch and cuDNN   │ Removed; replaced with factual inference latency claim                       │
+  │                       │ baselines"                                   │                                                                              │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Conference format     │ Plain IEEEtran                               │ NQComp 2026 header (top-right every page) + ISBN footer via fancyhdr         │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Speedup               │ 1000×                                        │ 2000–2200× (fresh measurements)                                              │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ All timing numbers    │ Old stale values (3.91s etc.)                │ Fresh consistent values (0.94–1.27 s/epoch)                                  │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ BN+Adam+LR accuracy   │ 79.9%                                        │ 81.0%                                                                        │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ BN+Adam+LR cause      │ "cosine LR over-decay"                       │ BN+Adam interaction instability (correct)                                    │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ §5.4 LR schedule      │ Claimed cosine but ran exponential           │ Fixed: now uses and describes actual cosine per-batch                        │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ §8.1 Phase 2          │ Missing                                      │ Added: parameter-dimension parallelism, unlimited scaling                    │
+  │ scalability           │                                              │                                                                              │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ §8.1 2PGA framing     │ Unclear                                      │ Added: state corruption (v_t, m_t) ≠ gradient accumulation                   │
+  ├───────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Table V (new)         │ Didn't exist                                 │ PyTorch vs CUDAnet comparison: 97.7% vs 97.0%, 0.25s vs 0.95s, 248MB vs      │
+  │                       │                                              │ 470KB, 1.8GB vs <2MB                                                         │
+  └───────────────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+  PyTorch benchmark script
+
+  - benchmark_pytorch.py created and run: 97.67% accuracy, 0.25 s/epoch, 248 MB VRAM, 1.8 GB install
+
+  All 10 figures regenerated from fresh data.
+
+  Files to upload to Overleaf: main.tex + all 4 PNG figures (training_accuracy_comparison.png, fig4_bn_impact.png, fig5_cpu_gpu_speedup.png,
+  fig6_two_phase_fix.png)

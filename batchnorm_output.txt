@@ -17,23 +17,23 @@ Validation split: 48000 training, 12000 validation samples
 Dataset: MNIST
 
 Epoch 0: Train 0.08810, Val 0.08825, Test 0.10180
-Epoch 1: Train 0.67650, Val 0.69817, Test 0.69350  Average time per epoch: 0.000000 sec
+Epoch 1: Train 0.67660, Val 0.69808, Test 0.69350  Average time per epoch: 0.000000 sec
 Epoch 2: Train 0.73660, Val 0.75150, Test 0.74800  Average time per epoch: inf sec
-Epoch 3: Train 0.78520, Val 0.79400, Test 0.78650  Average time per epoch: 11.955692 sec
-Epoch 4: Train 0.82090, Val 0.83175, Test 0.82310  Average time per epoch: 8.596071 sec
-Epoch 5: Train 0.84550, Val 0.85458, Test 0.84370  Average time per epoch: 7.028780 sec
-Epoch 6: Train 0.85990, Val 0.86742, Test 0.85960  Average time per epoch: 6.247180 sec
-Epoch 7: Train 0.88750, Val 0.89208, Test 0.88700  Average time per epoch: 5.779919 sec
-Epoch 8: Train 0.89820, Val 0.89975, Test 0.89650  Average time per epoch: 5.468087 sec
-Epoch 9: Train 0.90660, Val 0.90600, Test 0.90570  Average time per epoch: 5.247846 sec
-Epoch 10: Train 0.91210, Val 0.91050, Test 0.91030  Average time per epoch: 5.082301 sec
-Epoch 11: Train 0.91520, Val 0.91433, Test 0.91430  Average time per epoch: 4.952781 sec
-Epoch 12: Train 0.92420, Val 0.91958, Test 0.92010  Average time per epoch: 4.847228 sec
-Epoch 13: Train 0.92870, Val 0.92250, Test 0.92470  Average time per epoch: 4.762860 sec
-Epoch 14: Train 0.93080, Val 0.92400, Test 0.92530  Average time per epoch: 4.589909 sec
-Epoch 15: Train 0.93380, Val 0.92633, Test 0.92720  Average time per epoch: 4.440479 sec
-Epoch 16: Train 0.93710, Val 0.92908, Test 0.92920  Average time per epoch: 4.311994 sec
-Epoch 17: Train 0.93770, Val 0.93108, Test 0.93000  Average time per epoch: 4.212446 sec
-Epoch 18: Train 0.93960, Val 0.93267, Test 0.93280  Average time per epoch: 4.126598 sec
-Epoch 19: Train 0.94180, Val 0.93283, Test 0.93280  Average time per epoch: 4.048402 sec
-Epoch 20: Train 0.93910, Val 0.93283, Test 0.93060  Average time per epoch: 3.977122 sec
+Epoch 3: Train 0.78490, Val 0.79383, Test 0.78660  Average time per epoch: 2.395571 sec
+Epoch 4: Train 0.82060, Val 0.83158, Test 0.82300  Average time per epoch: 1.797549 sec
+Epoch 5: Train 0.84600, Val 0.85483, Test 0.84380  Average time per epoch: 1.597293 sec
+Epoch 6: Train 0.85950, Val 0.86717, Test 0.85940  Average time per epoch: 1.497375 sec
+Epoch 7: Train 0.88720, Val 0.89192, Test 0.88670  Average time per epoch: 1.438300 sec
+Epoch 8: Train 0.89840, Val 0.89992, Test 0.89630  Average time per epoch: 1.399653 sec
+Epoch 9: Train 0.90640, Val 0.90583, Test 0.90570  Average time per epoch: 1.370633 sec
+Epoch 10: Train 0.91180, Val 0.91017, Test 0.91050  Average time per epoch: 1.349157 sec
+Epoch 11: Train 0.91510, Val 0.91417, Test 0.91430  Average time per epoch: 1.332774 sec
+Epoch 12: Train 0.92430, Val 0.91983, Test 0.91980  Average time per epoch: 1.320542 sec
+Epoch 13: Train 0.92850, Val 0.92233, Test 0.92490  Average time per epoch: 1.309845 sec
+Epoch 14: Train 0.93050, Val 0.92392, Test 0.92530  Average time per epoch: 1.300861 sec
+Epoch 15: Train 0.93400, Val 0.92625, Test 0.92730  Average time per epoch: 1.293869 sec
+Epoch 16: Train 0.93720, Val 0.92900, Test 0.92930  Average time per epoch: 1.287523 sec
+Epoch 17: Train 0.93780, Val 0.93092, Test 0.93000  Average time per epoch: 1.282120 sec
+Epoch 18: Train 0.93960, Val 0.93300, Test 0.93260  Average time per epoch: 1.277671 sec
+Epoch 19: Train 0.94160, Val 0.93292, Test 0.93260  Average time per epoch: 1.273196 sec
+Epoch 20: Train 0.93930, Val 0.93283, Test 0.93100  Average time per epoch: 1.269466 sec

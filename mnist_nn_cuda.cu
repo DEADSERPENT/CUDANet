@@ -2002,6 +2002,16 @@ int main(const int argc, const char** argv){
 		cudaEventRecord( start_device, 0 ); // record cuda start time
 
 		for (int b = 0; b < num_batches; b++) {
+		// Per-batch cosine LR update: decay over total gradient steps, not just epochs.
+		// This prevents over-decay when num_batches >> 1 (e.g. 29 mini-batches/epoch).
+#if USE_LR_SCHEDULE && LR_SCHEDULE_TYPE == 2
+		{
+			int step = epoch * num_batches + b;
+			int total_steps = ne * num_batches;
+			current_lr = alpha * 0.5f * (1.0f + cosf(M_PI * step / (float)total_steps));
+			alpha_nb = current_lr / nb;
+		}
+#endif
 		// prepare batch - only sample from training portion (not validation)
 		for (int s=0; s<nb; s++){
 			float x = ((float)rand()/RAND_MAX) * num_train_actual;
