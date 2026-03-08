@@ -18,81 +18,81 @@ all: serial cuda
 # CPU baseline targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-serial: mnist_nn_serial_c.c
-	$(COMPILER1) mnist_nn_serial_c.c -o serial $(CFLAGS1_G)
+serial: src/mnist_nn_serial_c.c
+	$(COMPILER1) src/mnist_nn_serial_c.c -o serial $(CFLAGS1_G)
 
 # Multi-threaded CPU baseline using OpenMP (replaces the "strawman" single-thread)
 # Makes speedup claims credible – compare against this, not the serial target.
-serial_omp: mnist_nn_serial_c.c
-	$(COMPILER1) mnist_nn_serial_c.c -o serial_omp $(CFLAGS1_G) -fopenmp
+serial_omp: src/mnist_nn_serial_c.c
+	$(COMPILER1) src/mnist_nn_serial_c.c -o serial_omp $(CFLAGS1_G) -fopenmp
 	@echo "Built OpenMP baseline with $$(nproc) threads available"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core CUDA targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-cuda: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda $(CFLAGS2)
+cuda: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda $(CFLAGS2)
 
 # Momentum optimizer
-cuda_momentum: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_momentum $(CFLAGS2) -DOPTIMIZER_TYPE=1
+cuda_momentum: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_momentum $(CFLAGS2) -DOPTIMIZER_TYPE=1
 
 # Adam optimizer
-cuda_adam: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam $(CFLAGS2) -DOPTIMIZER_TYPE=2
+cuda_adam: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_adam $(CFLAGS2) -DOPTIMIZER_TYPE=2
 
 # Adam + cosine LR scheduling (matches paper description)
-cuda_adam_lr: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam_lr $(CFLAGS2) \
+cuda_adam_lr: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_adam_lr $(CFLAGS2) \
 	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DLR_SCHEDULE_TYPE=2
 
 # SGD + LR scheduling
-cuda_lr_schedule: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_lr_schedule $(CFLAGS2) -DUSE_LR_SCHEDULE=1
+cuda_lr_schedule: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_lr_schedule $(CFLAGS2) -DUSE_LR_SCHEDULE=1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Batch Normalisation (FIXED – correct multi-kernel implementation)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Fixed BN with Adam + LR schedule (achieves ~97% test accuracy)
-cuda_batchnorm: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_batchnorm $(CFLAGS2) \
+cuda_batchnorm: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_batchnorm $(CFLAGS2) \
 	    -DUSE_BATCH_NORM=1
 
-cuda_lr_bn: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_lr_bn $(CFLAGS2) \
+cuda_lr_bn: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_lr_bn $(CFLAGS2) \
 	    -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1
 
-cuda_adam_bn: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_adam_bn $(CFLAGS2) \
+cuda_adam_bn: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_adam_bn $(CFLAGS2) \
 	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1
 
 # Full feature stack: BN + Adam + cosine LR (per-batch decay, fixes over-decay)
-cuda_full: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_full $(CFLAGS2) \
+cuda_full: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_full $(CFLAGS2) \
 	    -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 -DUSE_BATCH_NORM=1 -DLR_SCHEDULE_TYPE=2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WMMA Tensor Core target (requires layer dims ≥ 16, compile-time multiples)
 # ─────────────────────────────────────────────────────────────────────────────
 
-cuda_wmma: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_wmma $(CFLAGS2) \
+cuda_wmma: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_wmma $(CFLAGS2) \
 	    -DUSE_TENSOR_CORES=1 -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # NVML energy profiling target (links against nvidia-ml)
 # ─────────────────────────────────────────────────────────────────────────────
 
-cuda_nvml: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_nvml $(CFLAGS2) \
+cuda_nvml: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_nvml $(CFLAGS2) \
 	    -DUSE_NVML -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 \
 	    -lnvidia-ml
 
 # Full features + NVML profiling (conference-grade build)
-cuda_nvml_full: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_nvml_full $(CFLAGS2) \
+cuda_nvml_full: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_nvml_full $(CFLAGS2) \
 	    -DUSE_NVML -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 \
 	    -DUSE_BATCH_NORM=1 -lnvidia-ml
 
@@ -100,12 +100,12 @@ cuda_nvml_full: mnist_nn_cuda.cu
 # Fashion-MNIST targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-cuda_fashion: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_fashion $(CFLAGS2) \
+cuda_fashion: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_fashion $(CFLAGS2) \
 	    -DFASHION_MNIST=1 -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1
 
-cuda_fashion_full: mnist_nn_cuda.cu
-	$(COMPILER2) mnist_nn_cuda.cu -o cuda_fashion_full $(CFLAGS2) \
+cuda_fashion_full: src/mnist_nn_cuda.cu
+	$(COMPILER2) src/mnist_nn_cuda.cu -o cuda_fashion_full $(CFLAGS2) \
 	    -DFASHION_MNIST=1 -DOPTIMIZER_TYPE=2 -DUSE_LR_SCHEDULE=1 \
 	    -DUSE_BATCH_NORM=1
 
@@ -113,8 +113,8 @@ cuda_fashion_full: mnist_nn_cuda.cu
 # Inference binary
 # ─────────────────────────────────────────────────────────────────────────────
 
-infer: infer.cu
-	$(COMPILER2) infer.cu -o infer $(CFLAGS2)
+infer: src/infer.cu
+	$(COMPILER2) src/infer.cu -o infer $(CFLAGS2)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Benchmark / profiling targets

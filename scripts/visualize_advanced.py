@@ -89,12 +89,12 @@ def parse_file(path):
 
 def load_all():
     files = {
-        'SGD':        'sgd_output.txt',
-        'Momentum':   'momentum_output.txt',
-        'Adam':       'adam_output.txt',
-        'Adam+LR':    'adam_lr_output.txt',
-        'BN+SGD':     'batchnorm_output.txt',
-        'BN+Adam+LR': 'full_output.txt',
+        'SGD':        'results/sgd_output.txt',
+        'Momentum':   'results/momentum_output.txt',
+        'Adam':       'results/adam_output.txt',
+        'Adam+LR':    'results/adam_lr_output.txt',
+        'BN+SGD':     'results/batchnorm_output.txt',
+        'BN+Adam+LR': 'results/full_output.txt',
     }
     return {k: parse_file(v) for k, v in files.items()}
 
@@ -109,7 +109,7 @@ def median_time(d):
 
 # ── Figure 4 – Batch Normalization Impact ─────────────────────────────────────
 
-def fig4_bn_impact(data, out='fig4_bn_impact.png'):
+def fig4_bn_impact(data, out='figures/fig4_bn_impact.png'):
     """Grouped bar: without-BN vs with-BN, for SGD and Adam+LR."""
     groups = [('SGD', 'SGD', 'BN+SGD'), ('Adam+LR', 'Adam+LR', 'BN+Adam+LR')]
 
@@ -152,7 +152,7 @@ def fig4_bn_impact(data, out='fig4_bn_impact.png'):
 
 # ── Figure 5 – CPU vs GPU Speedup Breakdown ───────────────────────────────────
 
-def fig5_cpu_gpu_speedup(out='fig5_cpu_gpu_speedup.png'):
+def fig5_cpu_gpu_speedup(out='figures/fig5_cpu_gpu_speedup.png'):
     """Horizontal stacked bar showing relative epoch time for CPU and GPU configs."""
     # Verified numbers from paper / memory
     configs = [
@@ -198,7 +198,7 @@ def fig5_cpu_gpu_speedup(out='fig5_cpu_gpu_speedup.png'):
 
 # ── Figure 6 – Two-Phase Gradient Fix (Before / After) ───────────────────────
 
-def fig6_two_phase_fix(out='fig6_two_phase_fix.png'):
+def fig6_two_phase_fix(out='figures/fig6_two_phase_fix.png'):
     """Side-by-side bar: accuracy before and after race-condition fix."""
     optimizers = ['SGD', 'Momentum', 'Adam', 'BN+Adam+LR']
     before = [74.88, 0.00, 0.00, 17.91]    # before fix (race condition, single-batch)
@@ -249,7 +249,7 @@ def fig6_two_phase_fix(out='fig6_two_phase_fix.png'):
 
 # ── Figure 7 – Learning Rate Schedule Effect ─────────────────────────────────
 
-def fig7_lr_schedule(data, out='fig7_lr_schedule_effect.png'):
+def fig7_lr_schedule(data, out='figures/fig7_lr_schedule_effect.png'):
     """Accuracy curves: Adam (fixed LR) vs Adam+LR (cosine/step schedule)."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
 
@@ -290,7 +290,7 @@ def fig7_lr_schedule(data, out='fig7_lr_schedule_effect.png'):
 
 # ── Figure 8 – Accuracy–Speed Tradeoff (Pareto) ──────────────────────────────
 
-def fig8_accuracy_speed_tradeoff(data, out='fig8_accuracy_speed_tradeoff.png'):
+def fig8_accuracy_speed_tradeoff(data, out='figures/fig8_accuracy_speed_tradeoff.png'):
     """Scatter: x=time/epoch, y=test accuracy. Marker size = relative complexity."""
     fig, ax = plt.subplots(figsize=(9, 6))
 
@@ -331,7 +331,7 @@ def fig8_accuracy_speed_tradeoff(data, out='fig8_accuracy_speed_tradeoff.png'):
 
 # ── Figure 9 – Epoch-by-Epoch Accuracy Heatmap ───────────────────────────────
 
-def fig9_convergence_heatmap(data, out='fig9_convergence_heatmap.png'):
+def fig9_convergence_heatmap(data, out='figures/fig9_convergence_heatmap.png'):
     """Heatmap where rows=optimizers, columns=epochs, value=test accuracy."""
     # Gather data
     optimizer_names = [k for k, v in data.items() if v['test_acc']]
@@ -380,7 +380,7 @@ def fig9_convergence_heatmap(data, out='fig9_convergence_heatmap.png'):
 
 # ── Figure 10 – Per-Epoch Accuracy Gain (dAcc/dEpoch) ────────────────────────
 
-def fig10_epoch_gain(data, out='fig10_epoch_gain.png'):
+def fig10_epoch_gain(data, out='figures/fig10_epoch_gain.png'):
     """Bar chart: accuracy improvement each epoch (derivative). Shows learning dynamics."""
     fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharey=False)
     axes = axes.flatten()
