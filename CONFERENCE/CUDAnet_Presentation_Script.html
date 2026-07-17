@@ -1,0 +1,1295 @@
+<title>Presenting CUDAnet — Your Slide-by-Slide Script</title>
+<style>
+:root{
+  --paper:#EDEAE4; --surface:#FFFFFF; --surface-2:#F5F2EC;
+  --ink:#201C16; --ink-soft:#5B5347; --ink-faint:#8B8271;
+  --rule:#DBD5C8; --rule-strong:#C7C0AF;
+  --accent:#B5691E; --accent-ink:#8A4E16; --accent-soft:#F2E1C7;
+  --signal:#1D7A80; --signal-soft:#DCEEEE;
+  --good:#2C7A4B; --good-soft:#E1F0E6;
+  --warn:#A83A2A; --warn-soft:#F6E2DD;
+  --script-bg:#1B1712; --script-ink:#F1E9D8; --script-accent:#E2A34F;
+  --code-bg:#15130F; --code-ink:#E7E1D3; --code-dim:#8A8271; --code-key:#E2A34F;
+}
+:root[data-theme="dark"]{
+  --paper:#14120F; --surface:#1B1815; --surface-2:#211D18;
+  --ink:#EDE9E2; --ink-soft:#A79E90; --ink-faint:#736A5C;
+  --rule:#332D25; --rule-strong:#453D31;
+  --accent:#E2A34F; --accent-ink:#F0C083; --accent-soft:#3A2C18;
+  --signal:#59B8BE; --signal-soft:#16302F;
+  --good:#57B67F; --good-soft:#173425;
+  --warn:#DD6B57; --warn-soft:#3A1E19;
+  --script-bg:#0F0D0A; --script-ink:#F1E9D8; --script-accent:#E2A34F;
+  --code-bg:#0C0B08; --code-ink:#E7E1D3; --code-dim:#6E6858; --code-key:#E2A34F;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#14120F; --surface:#1B1815; --surface-2:#211D18;
+    --ink:#EDE9E2; --ink-soft:#A79E90; --ink-faint:#736A5C;
+    --rule:#332D25; --rule-strong:#453D31;
+    --accent:#E2A34F; --accent-ink:#F0C083; --accent-soft:#3A2C18;
+    --signal:#59B8BE; --signal-soft:#16302F;
+    --good:#57B67F; --good-soft:#173425;
+    --warn:#DD6B57; --warn-soft:#3A1E19;
+    --script-bg:#0F0D0A; --script-ink:#F1E9D8; --script-accent:#E2A34F;
+    --code-bg:#0C0B08; --code-ink:#E7E1D3; --code-dim:#6E6858; --code-key:#E2A34F;
+  }
+}
+@media print{
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]){
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F5F2EC;
+    --ink:#201C16; --ink-soft:#5B5347; --ink-faint:#8B8271;
+    --rule:#CFC8B8; --rule-strong:#B9B09B;
+    --accent:#B5691E; --accent-ink:#8A4E16; --accent-soft:#F2E1C7;
+    --signal:#1D7A80; --signal-soft:#DCEEEE;
+    --good:#2C7A4B; --good-soft:#E1F0E6;
+    --warn:#A83A2A; --warn-soft:#F6E2DD;
+    --script-bg:#1B1712; --script-ink:#F1E9D8; --script-accent:#E2A34F;
+    --code-bg:#15130F; --code-ink:#E7E1D3; --code-dim:#9A9280; --code-key:#E2A34F;
+  }
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+  .rail{ display:none !important; }
+  .shell{ display:block !important; }
+  main{ max-width:100% !important; padding:0 6mm 10mm !important; }
+  .titleblock{ margin-bottom:24px; }
+  .preflight{ break-inside:avoid; page-break-inside:avoid; }
+  .slide{ break-before:page; page-break-before:always; border-top:none; padding-top:6mm; }
+  #s1{ break-before:auto; page-break-before:avoid; }
+  .slide-head{ break-after:avoid; page-break-after:avoid; }
+  .block, .qapair, .gterm, .bonus, .onslide, .say blockquote, .codeblk pre, .twrap{
+    break-inside:avoid; page-break-inside:avoid;
+  }
+  a{ color:inherit; text-decoration:none; }
+  a[href^="#"]::after{ content:""; }
+  hr.div{ display:none; }
+  footer.pagefoot{ break-before:page; page-break-before:always; }
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:'Source Serif 4','Iowan Old Style','Palatino Linotype',Georgia,serif;
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+::selection{ background:var(--accent-soft); }
+a{ color:var(--accent-ink); }
+.mono{ font-family:ui-monospace,'SF Mono','Cascadia Code','JetBrains Mono',Consolas,monospace; }
+.chrome{ font-family:-apple-system,'Segoe UI',system-ui,Helvetica,Arial,sans-serif; }
+h1,h2,h3,h4{ font-family:'Source Serif 4','Iowan Old Style',Georgia,serif; font-weight:600; text-wrap:balance; }
+
+.shell{ display:grid; grid-template-columns: 300px minmax(0,1fr); min-height:100vh; }
+@media (max-width: 980px){ .shell{ grid-template-columns: 1fr; } }
+.rail{ border-right:1px solid var(--rule); background:var(--surface); position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; padding:26px 20px 40px; }
+@media (max-width: 980px){ .rail{ position:static; height:auto; border-right:none; border-bottom:1px solid var(--rule); } }
+.rail-brand{ font-weight:700; font-size:1.02rem; }
+.rail-brand .dot{ color:var(--accent); }
+.rail-sub{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.72rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+.rail-total{ margin-top:14px; padding:10px 12px; background:var(--surface-2); border-radius:5px; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.76rem; color:var(--ink-soft); }
+.rail-total b{ color:var(--accent-ink); font-family:ui-monospace,Consolas,monospace; }
+.toc{ margin:16px 0 0; padding:0; list-style:none; }
+.toc a{ display:flex; gap:8px; align-items:baseline; padding:5px 6px; border-radius:3px; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.8rem; color:var(--ink-soft); text-decoration:none; }
+.toc a:hover{ background:var(--surface-2); color:var(--ink); }
+.toc a.active{ background:var(--accent-soft); color:var(--accent-ink); }
+.toc .num{ font-family:ui-monospace,Consolas,monospace; font-size:.7rem; color:var(--ink-faint); min-width:1.4em; }
+.toc a.active .num{ color:var(--accent-ink); }
+.toc .dur{ margin-left:auto; font-family:ui-monospace,Consolas,monospace; font-size:.68rem; color:var(--ink-faint); }
+
+main{ padding:48px clamp(20px,4vw,72px) 120px; max-width:880px; }
+.titleblock{ margin-bottom:40px; }
+.kicker{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.76rem; letter-spacing:.14em; text-transform:uppercase; color:var(--signal); font-weight:600; }
+.titleblock h1{ font-size:clamp(1.9rem,4vw,2.5rem); line-height:1.14; margin:.4em 0 .3em; }
+.titleblock .dek{ color:var(--ink-soft); font-size:1.1rem; max-width:62ch; }
+.metarow{ display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.metarow .chip{ font-family:ui-monospace,Consolas,monospace; font-size:.74rem; color:var(--ink-soft); border:1px solid var(--rule); padding:4px 9px; border-radius:3px; background:var(--surface); }
+
+.preflight{ background:var(--surface); border:1px solid var(--rule); border-radius:6px; padding:22px 26px; margin:28px 0 8px; }
+.preflight h3{ margin-top:0; }
+.preflight ul{ padding-left:1.2em; }
+.preflight li{ margin:.35em 0; }
+
+/* Glossary */
+.gloss{ display:grid; grid-template-columns: 1fr; gap:14px; margin:18px 0; }
+.gterm{ border:1px solid var(--rule); border-radius:6px; padding:14px 18px; background:var(--surface); }
+.gterm .gname{ font-family:ui-monospace,Consolas,monospace; font-weight:700; color:var(--accent-ink); font-size:.95rem; }
+.gterm .gsimple{ margin:.5em 0 .2em; }
+.gterm .gsimple::before{ content:"Simply: "; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); display:block; margin-bottom:2px; }
+.gterm .gtech::before{ content:"Technically: "; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--signal); display:block; margin-bottom:2px; }
+.gterm .gtech{ margin:.6em 0 0; }
+
+/* Slide sections */
+.slide{ margin-top:70px; scroll-margin-top:24px; border-top:3px solid var(--accent); padding-top:22px; }
+.slide-head{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+.slide-num{ font-family:ui-monospace,Consolas,monospace; font-size:.78rem; color:var(--accent-ink); text-transform:uppercase; letter-spacing:.1em; }
+.slide h2{ font-size:1.55rem; margin:.15em 0 .1em; flex:1 1 auto; }
+.dur-badge{ font-family:ui-monospace,Consolas,monospace; font-size:.76rem; color:var(--ink-soft); border:1px solid var(--rule); border-radius:20px; padding:3px 12px; white-space:nowrap; }
+
+.block{ margin:20px 0; }
+.block > .label{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.label .swatch{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+.onslide{ background:var(--surface); border:1px solid var(--rule); border-radius:6px; padding:16px 20px; }
+.onslide .label{ color:var(--ink-faint); }
+.onslide .label .swatch{ background:var(--ink-faint); }
+.onslide ul{ margin:.3em 0; padding-left:1.2em; }
+.onslide li{ margin:.25em 0; }
+
+.say .label{ color:var(--script-accent); }
+.say .label .swatch{ background:var(--script-accent); }
+.say blockquote{
+  margin:0; background:var(--script-bg); color:var(--script-ink); border-radius:6px;
+  padding:20px 24px; font-family:ui-monospace,'SF Mono','Cascadia Code',Consolas,monospace;
+  font-size:.92rem; line-height:1.75; border-left:4px solid var(--script-accent);
+}
+
+.why .label{ color:var(--signal); }
+.why .label .swatch{ background:var(--signal); }
+.why p{ margin:0; }
+
+.figs .label{ color:var(--good); }
+.figs .label .swatch{ background:var(--good); }
+.figchip{ display:inline-block; font-family:ui-monospace,Consolas,monospace; font-size:.78rem; background:var(--good-soft); color:var(--good); padding:3px 10px; border-radius:20px; margin:3px 4px 3px 0; }
+
+.codeblk .label{ color:var(--ink-soft); }
+.codeblk .label .swatch{ background:var(--ink-soft); }
+.codeblk pre{ background:var(--code-bg); color:var(--code-ink); border-radius:6px; padding:14px 18px; overflow-x:auto; font-size:.8rem; line-height:1.5; margin:0; }
+.codeblk pre code{ font-family:ui-monospace,Consolas,monospace; }
+.codeblk .none{ font-style:italic; color:var(--ink-faint); font-size:.9rem; }
+pre .c{ color:var(--code-dim); }
+pre .k{ color:var(--code-key); }
+
+.keywords .label{ color:var(--accent-ink); }
+.keywords .label .swatch{ background:var(--accent); }
+.kwchip{ display:inline-block; font-family:ui-monospace,Consolas,monospace; font-size:.78rem; background:var(--accent-soft); color:var(--accent-ink); padding:3px 10px; border-radius:20px; margin:3px 4px 3px 0; font-weight:600; }
+
+.pointat .label{ color:var(--ink-soft); }
+.pointat .label .swatch{ background:var(--ink-soft); }
+.pointat ul{ margin:.3em 0; padding-left:1.2em; }
+.pointat li{ margin:.3em 0; }
+.pointat li::marker{ content:"👉 "; }
+
+.qa .label{ color:var(--signal); }
+.qa .label .swatch{ background:var(--signal); }
+.qapair{ border:1px solid var(--rule); border-left:3px solid var(--signal); border-radius:0 6px 6px 0; padding:12px 16px; margin:10px 0; background:var(--surface); }
+.qapair .q{ font-weight:700; margin:0 0 6px; }
+.qapair .q::before{ content:"Q — "; color:var(--signal); }
+.qapair .a{ margin:0; color:var(--ink-soft); }
+.qapair .a::before{ content:"A — "; color:var(--good); font-weight:700; }
+
+.mistakes .label{ color:var(--warn); }
+.mistakes .label .swatch{ background:var(--warn); }
+.mistakes ul{ margin:.3em 0; padding-left:1.2em; }
+.mistakes li{ margin:.3em 0; }
+.mistakes li::marker{ content:"✕ "; color:var(--warn); font-weight:700; }
+
+.twrap{ overflow-x:auto; margin:14px 0; border:1px solid var(--rule); border-radius:5px; }
+table{ border-collapse:collapse; width:100%; font-size:.86rem; min-width:460px; }
+thead th{ text-align:left; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); background:var(--surface-2); padding:8px 12px; border-bottom:1px solid var(--rule); }
+tbody td{ padding:7px 12px; border-bottom:1px solid var(--rule); font-family:ui-monospace,Consolas,monospace; font-variant-numeric:tabular-nums; }
+tbody td.prose{ font-family:'Source Serif 4',Georgia,serif; }
+tbody tr:last-child td{ border-bottom:none; }
+
+hr.div{ border:none; border-top:1px solid var(--rule); margin:56px 0; }
+.bonus{ background:var(--surface); border:1px dashed var(--rule-strong); border-radius:6px; padding:20px 24px; margin:18px 0; }
+footer.pagefoot{ margin-top:70px; padding-top:22px; border-top:1px solid var(--rule); color:var(--ink-faint); font-family:-apple-system,'Segoe UI',sans-serif; font-size:.78rem; }
+@media (prefers-reduced-motion: reduce){ *{ scroll-behavior:auto !important; } }
+html{ scroll-behavior:smooth; }
+</style>
+
+<div class="shell">
+  <nav class="rail chrome" aria-label="Slide list">
+    <div class="rail-brand">Presenting <span class="dot">CUDAnet</span></div>
+    <div class="rail-sub">12-slide script · ~12 min</div>
+    <div class="rail-total">Total runtime as scripted: <b>≈ 12m 25s</b><br/>Trim guide included if you need to hit 10.</div>
+    <ul class="toc" id="toc">
+      <li><a href="#pre"><span class="num">·</span>Before you walk in<span class="dur"></span></a></li>
+      <li><a href="#s1"><span class="num">01</span>Title<span class="dur">0:20</span></a></li>
+      <li><a href="#s2"><span class="num">02</span>The problem<span class="dur">1:05</span></a></li>
+      <li><a href="#s3"><span class="num">03</span>Related work<span class="dur">0:50</span></a></li>
+      <li><a href="#s4"><span class="num">04</span>Architecture<span class="dur">1:00</span></a></li>
+      <li><a href="#s5"><span class="num">05</span>The race condition<span class="dur">1:25</span></a></li>
+      <li><a href="#s6"><span class="num">06</span>The 2PGA fix<span class="dur">1:35</span></a></li>
+      <li><a href="#s7"><span class="num">07</span>Batch norm on GPU<span class="dur">0:55</span></a></li>
+      <li><a href="#s8"><span class="num">08</span>Experimental setup<span class="dur">0:35</span></a></li>
+      <li><a href="#s9"><span class="num">09</span>Results I: recovery<span class="dur">1:10</span></a></li>
+      <li><a href="#s10"><span class="num">10</span>Results II: speed<span class="dur">1:25</span></a></li>
+      <li><a href="#s11"><span class="num">11</span>The BN+Adam anomaly<span class="dur">0:55</span></a></li>
+      <li><a href="#s12"><span class="num">12</span>Edge AI + conclusion<span class="dur">1:10</span></a></li>
+      <li><a href="#bonus"><span class="num">+</span>If they go off-script<span class="dur"></span></a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div class="titleblock">
+      <div class="kicker">A rehearsal script, not a slide template</div>
+      <h1>How to present CUDAnet like you've given this talk fifty times</h1>
+      <p class="dek">Twelve slides, word-for-word. What to say, why the slide exists, what the audience
+      will ask, and what will make you look like you don't understand your own paper — so you never
+      do that thing.</p>
+      <div class="metarow">
+        <span class="chip">IEEE conference audience</span>
+        <span class="chip">10–12 min target</span>
+        <span class="chip">12 slides</span>
+        <span class="chip">assumes zero prior CUDA knowledge</span>
+      </div>
+    </div>
+
+    <div class="preflight" id="pre">
+      <h3>Read this part first — how to use the guide</h3>
+      <p>You did not just write a summary of someone else's work. You found and fixed a real,
+      reproducible bug. Every time you feel nervous in the next ten minutes, remember that one fact:
+      you can reproduce 0.0% accuracy on command, and you can reproduce 97.2% on command, by changing
+      one thing. That's a stronger position than most people walk into a conference room with.</p>
+      <p>Each slide below has the same eight parts, always in this order: what's <em>on the slide</em>,
+      what you <em>say</em> (word for word — read it a few times until it sounds like you, not like a
+      script), <em>why</em> the slide exists in the talk's argument, the <em>figures</em> to display,
+      any <em>code</em> you're allowed to show, <em>keywords</em> to land with emphasis, what to
+      physically <em>point at</em>, and the <em>questions</em> people are likely to ask with your best
+      answer ready. A final "mistakes to avoid" list closes each slide.</p>
+      <p><strong>Timing:</strong> the full script below runs about 12 minutes 25 seconds read at a
+      natural, unhurried pace. If your slot is a hard 10, cut Slide 3 (Related Work) down to naming two
+      papers instead of four, and read Slide 8 (Experimental Setup) faster — those two cuts alone save
+      about a minute and a half without touching your actual contribution.</p>
+    </div>
+
+    <h2 style="margin-top:44px;">CUDA words you need to own before you say them out loud</h2>
+    <p style="max-width:68ch;">You don't need to be a CUDA expert to give this talk well — you need to
+    be able to define eight words without hesitating, because the moment you hesitate on a word like
+    "kernel" or "atomic," the audience stops trusting the rest of the talk. Read this once, out loud,
+    the night before.</p>
+    <div class="gloss">
+      <div class="gterm">
+        <div class="gname">GPU vs. CPU</div>
+        <p class="gsimple">A CPU is a handful of very smart workers who can each do complicated things
+        one after another, fast. A GPU is thousands of much simpler workers who can each only do one
+        simple thing — but they all do it at the exact same instant.</p>
+        <p class="gtech">A CPU has a few (4–64) powerful cores optimized for low-latency sequential
+        instruction streams; a GPU has thousands of simpler cores (3,328 on the RTX A2000 used in this
+        paper) optimized for high-throughput data-parallel execution of the same instruction across
+        many data elements — exactly the shape of "run this same forward pass on every image in the
+        batch."</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Thread</div>
+        <p class="gsimple">One single worker. In this paper, one thread usually handles one training
+        image.</p>
+        <p class="gtech">The smallest unit of execution on a GPU — a single instruction stream with
+        its own registers and program counter, one of thousands launched together to run identical
+        code over different data.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Kernel</div>
+        <p class="gsimple">The one small program that every thread runs. You write it once; the GPU
+        runs thousands of copies of it at the same time.</p>
+        <p class="gtech">A function marked <code class="mono">__global__</code> in CUDA C, launched
+        from the CPU with a specified number of threads, executed identically (but on different data)
+        by every one of them.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Block &amp; grid</div>
+        <p class="gsimple">Threads are organized into small teams called blocks, and all the blocks
+        together are called a grid — like a stadium organized into sections, and the sections together
+        make the whole crowd.</p>
+        <p class="gtech">A <em>block</em> is a group of threads (this paper uses 128 or 256 per block)
+        that can synchronize with each other and share fast on-chip memory; a <em>grid</em> is the full
+        set of blocks launched by one kernel call. Blocks cannot synchronize with each other mid-kernel
+        — this fact is exactly why the race condition in this paper is possible.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Race condition</div>
+        <p class="gsimple">Two workers try to update the same shared notebook at the same time. Both
+        read "100," both add their own number, both write back — whoever writes last erases the
+        other's contribution, and nobody notices.</p>
+        <p class="gtech">Undefined behavior arising when two or more threads access the same memory
+        location concurrently, at least one write, with no enforced ordering — the final value depends
+        on non-deterministic scheduling rather than program logic.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Atomic operation (<code class="mono">atomicAdd</code>)</div>
+        <p class="gsimple">A single action that's guaranteed to happen all at once, with no other
+        worker able to interrupt it halfway through — like a bank teller who won't start your
+        neighbor's transaction until yours is fully done.</p>
+        <p class="gtech">A hardware-guaranteed indivisible read-modify-write instruction. Critically,
+        it only makes <em>that one operation</em> indivisible — a multi-step formula built from
+        several reads and writes around it is <em>not</em> automatically made safe just because one
+        step inside it uses an atomic.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Synchronization barrier (<code class="mono">cudaDeviceSynchronize()</code>)</div>
+        <p class="gsimple">A checkpoint where you make everyone wait until every worker has finished
+        the current task, before anyone starts the next one.</p>
+        <p class="gtech">A host-side (CPU-side) call that blocks until every kernel previously
+        launched on the device has completed execution — the only reliable way to guarantee that
+        every thread's writes are visible before a dependent kernel reads them.</p>
+      </div>
+      <div class="gterm">
+        <div class="gname">Throughput / speedup</div>
+        <p class="gsimple">How much work gets done per second, and how many times faster that is
+        than the slow way of doing it.</p>
+        <p class="gtech">Speedup = T<sub>baseline</sub> / T<sub>accelerated</sub>, measured here in
+        wall-clock seconds per training epoch via CUDA event timers, compared against a serial CPU
+        implementation of the identical algorithm.</p>
+      </div>
+    </div>
+
+    <hr class="div"/>
+
+    <!-- ============ SLIDE 1 ============ -->
+    <section class="slide" id="s1">
+      <div class="slide-head">
+        <span class="slide-num">Slide 01 / 12</span>
+        <h2>Title</h2>
+        <span class="dur-badge">≈ 20 sec</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>Paper title, your name and co-authors, affiliation (Manipal Institute of Technology
+        Bengaluru), and one short subtitle line under the title — something like
+        <em>"A race condition in GPU-parallel optimizers, found and fixed."</em> Nothing else. No bullet
+        points. Let it breathe.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Good [morning/afternoon]. My name is [your name], and together with my co-authors
+        Chiranth R and Dr. Pavithra N from Manipal Institute of Technology, I'm presenting CUDAnet — a
+        neural network training engine we built entirely from scratch in CUDA C, with zero dependency
+        on frameworks like PyTorch or TensorFlow. In the next few minutes, I'll show you a subtle bug
+        we found in how GPUs parallelize modern optimizers — one that silently destroys training — and
+        the fix we designed for it.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>A conference audience decides in the first fifteen seconds whether to actually listen. Naming
+        the punchline early — "a bug that silently destroys training" — is a hook. Don't save your best
+        line for the end; nobody remembers slide 12 if they checked out during slide 2.</p>
+      </div>
+
+      <div class="block figs">
+        <span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">none</span>
+      </div>
+      <div class="block codeblk">
+        <span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p>
+      </div>
+      <div class="block keywords">
+        <span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">from-scratch CUDA</span><span class="kwchip">zero dependency</span>
+      </div>
+      <div class="block pointat">
+        <span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>Nothing — look at the audience, not the screen, for this slide. It's the one moment you
+        don't need the slide's help.</li></ul>
+      </div>
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions here</span>
+        <p style="color:var(--ink-faint); font-style:italic;">Almost never questioned at the title slide
+        — move on confidently.</p>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't read the title off the slide in a flat monotone — the audience can already read.</li>
+          <li>Don't apologize or hedge ("um, so, I guess I'll start…"). Start with your first sentence,
+          already decided in advance.</li>
+          <li>Don't rush this slide just because "it's just the title" — it sets your vocal pace for
+          the whole talk.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 2 ============ -->
+    <section class="slide" id="s2">
+      <div class="slide-head">
+        <span class="slide-num">Slide 02 / 12</span>
+        <h2>The problem</h2>
+        <span class="dur-badge">≈ 1:05</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>One headline sentence, large: <strong>"Parallelizing training is easy. Parallelizing the
+        optimizer is not."</strong> Below it, a simple two-part visual you sketch yourself (no figure in
+        the paper covers this) — on the left, many small boxes labeled "Thread 1, Thread 2, … Thread
+        2048," each with an arrow pointing at one shared box on the right labeled "v (velocity)". That's
+        the whole slide.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Let's start with why this problem exists at all. When you train a neural network on
+        a GPU, you split your mini-batch across thousands of GPU threads — think of a thread as one
+        tiny independent worker, and a kernel as the small program every worker runs at the same time.
+        Each thread takes one training image, runs it forward through the network, and computes how
+        wrong the prediction was. That part is what we call "embarrassingly parallel" — every thread's
+        work is completely independent, so running two thousand of them at once is completely safe.
+        But then comes the optimizer step — the part that actually updates the network's weights using
+        that error signal. And optimizers like Momentum and Adam are not stateless. They keep a running
+        memory — velocity for Momentum, moment estimates for Adam — that carries over from one training
+        step to the next. All two thousand threads want to update that same shared memory at the same
+        time. And that's where things quietly go wrong.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>Every good conference talk earns its solution by first making the audience feel the problem.
+        This slide plants the one idea the rest of the talk depends on: some parts of training are safe
+        to parallelize, some aren't, and the difference is whether there's shared, persistent state.</p>
+      </div>
+
+      <div class="block figs">
+        <span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">none from the paper — draw your own two-box diagram</span>
+      </div>
+      <div class="block codeblk">
+        <span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None yet — save code for Slide 5, where the bug becomes concrete.</p>
+      </div>
+      <div class="block keywords">
+        <span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">embarrassingly parallel</span><span class="kwchip">stateful</span>
+        <span class="kwchip">shared memory</span>
+      </div>
+      <div class="block pointat">
+        <span class="label"><span class="swatch"></span>What to point at</span>
+        <ul>
+          <li>The cluster of "Thread" boxes when you say "two thousand threads."</li>
+          <li>The single shared "v" box when you say "that same shared memory."</li>
+        </ul>
+      </div>
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">What is a race condition, in one sentence?</p>
+        <p class="a">It's when two or more threads read and write the same memory at the same time
+        without coordination, so the result depends on unpredictable timing rather than the intended
+        computation — and one thread's contribution can be silently erased by another's.</p></div>
+        <div class="qapair"><p class="q">Isn't this just a threading problem that exists on CPUs too?</p>
+        <p class="a">The underlying hazard is the same concurrency problem you'd see on a multi-core CPU
+        — but the scale is different by orders of magnitude. A CPU might have 16 threads racing; here
+        we have 2,048, and the GPU offers no cross-block synchronization primitive mid-kernel, so the
+        exposure is both bigger and harder to guard against.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't say the phrase "race condition" before you've explained what it means — you'll lose
+          anyone who isn't already a systems person.</li>
+          <li>Don't dive into CUDA syntax here. This slide is conceptual; save every piece of code for
+          Slide 5.</li>
+          <li>Don't rush — this is the idea the entire talk is built on. If the audience doesn't get
+          this slide, nothing after it lands.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 3 ============ -->
+    <section class="slide" id="s3">
+      <div class="slide-head">
+        <span class="slide-num">Slide 03 / 12</span>
+        <h2>Related work</h2>
+        <span class="dur-badge">≈ 0:50</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>A short list, four lines max: <em>Wang et al. — 17× inference speedup. Rao et al. — 487×
+        backprop speedup. Zhao et al. — 110× speedup, 97.2% MNIST accuracy.</em> Under the list, one
+        bolded closing line: <strong>"None of these identify or resolve race conditions in stateful
+        optimizers."</strong></p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>This isn't the first paper to accelerate neural network training with hand-written
+        CUDA kernels. Wang et al. reported a 17× inference speedup, Rao et al. 487× for backpropagation,
+        Zhao et al. 110× with 97.2% MNIST accuracy — genuinely impressive engineering. But every one of
+        these only parallelizes the stateless parts: the forward pass, the backward pass, plain gradient
+        descent. None of them puts a stateful optimizer like Adam inside a per-sample GPU kernel, so this
+        particular race condition never had a chance to surface in their designs. Frameworks like
+        PyTorch avoid the problem by construction — the optimizer step is always a separate function call
+        from the backward pass — which means nobody using a framework ever sees why the naive version
+        would be wrong in the first place.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>A conference reviewer's first instinct is "hasn't someone already done this?" This slide
+        answers that question before anyone has to ask it, and positions your contribution precisely:
+        not faster kernels, but a correctness argument nobody else made explicit.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">none — this is a citations slide</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">stateless parts</span><span class="kwchip">frameworks hide the mechanism</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>Each citation as you name it — don't just read the list, gesture along it left to right.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">How is this different from just calling <code class="mono">optimizer.step()</code>
+        separately in PyTorch?</p>
+        <p class="a">Conceptually it's the same shape — separate the gradient phase from the state-update
+        phase. Our contribution is making that separation explicit, naming the failure mode it prevents,
+        and demonstrating with real accuracy numbers exactly what breaks if you skip it. Framework users
+        get this for free and never see why it matters; we make the mechanism and its necessity
+        visible.</p></div>
+        <div class="qapair"><p class="q">What about asynchronous / distributed training work, like Dean
+        et al.'s DistBelief?</p>
+        <p class="a">Those systems sidestep the correctness question rather than answering it — they
+        tolerate "stale" gradients, where a worker updates against slightly out-of-date weights. Our
+        approach is fully synchronous and zero-staleness: every update uses the complete, current
+        batch gradient, with no approximation.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't spend more than a minute here — related work is a required beat, not the show.</li>
+          <li>Don't say "no one has ever done this" — say precisely what's missing (explicit
+          identification of this race condition), which is defensible; a blanket novelty claim isn't.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 4 ============ -->
+    <section class="slide" id="s4">
+      <div class="slide-head">
+        <span class="slide-num">Slide 04 / 12</span>
+        <h2>System architecture</h2>
+        <span class="dur-badge">≈ 1:00</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>Figure 1 from the paper, full width. Nothing else — let the diagram do the work.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Here's the system we built — CUDAnet. It's a fully configurable multi-layer
+        perceptron, shown here in its default MNIST configuration: 784 input pixels from a 28-by-28
+        image, two hidden layers of 128 neurons with ReLU and batch normalization, and a 10-way softmax
+        output. Every weight and bias lives in one flat array on the GPU, addressed by precomputed
+        offsets rather than pointers — good for memory efficiency, though I won't dwell on that today.
+        What matters for this talk is the split you see here: Phase 1, where thousands of threads run
+        forward and backward propagation in parallel and accumulate gradients; and Phase 2, a single,
+        sequential, race-free step that actually updates the optimizer state. That two-phase split is
+        the heart of this paper, and the next slides explain exactly why it's necessary.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>You need one concrete picture of the system before the audience can follow an abstract
+        correctness argument. This slide also plants "Phase 1 / Phase 2" visually, so when you name
+        Two-Phase Gradient Accumulation on Slide 6, the audience already has a picture to hang it on.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Fig. 1 — required</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None — this is the one purely visual slide in the deck.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">multi-layer perceptron</span><span class="kwchip">batch normalization</span>
+        <span class="kwchip">Phase 1 / Phase 2</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul>
+          <li>Trace input → hidden 1 → hidden 2 → output left to right as you describe the layers.</li>
+          <li>Physically point at the Phase 1 box, pause, then point at the Phase 2 box.</li>
+        </ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Why an MLP and not a CNN, given MNIST is usually solved with
+        convolutions?</p>
+        <p class="a">The architecture choice is deliberate: an MLP isolates the parallel-correctness
+        question we care about from the added complexity of convolutional kernels. We're not claiming
+        state-of-the-art accuracy — we're claiming a systems result, and the simplest architecture that
+        still has a real stateful optimizer is the right instrument for that.</p></div>
+        <div class="qapair"><p class="q">Is the network size fixed, or configurable?</p>
+        <p class="a">Fully configurable at runtime — hidden layer count and width are command-line
+        arguments, not compile-time constants. 784-128-128-10 is simply the configuration we
+        benchmarked and report in the paper.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't get pulled into explaining the flat-array memory layout in detail — it's real
+          engineering but it's not this talk's contribution. One sentence, then move on.</li>
+          <li>Don't call this "just a normal neural network" dismissively — it's the concrete instrument
+          the whole result rests on.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 5 ============ -->
+    <section class="slide" id="s5">
+      <div class="slide-head">
+        <span class="slide-num">Slide 05 / 12</span>
+        <h2>The race condition</h2>
+        <span class="dur-badge">≈ 1:25</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>The naive Momentum update equation (paper's Eq. 4), rendered large:
+        <span class="mono">v_t = βv_t + ∇W L</span>. Below it, the tiny code snippet at right. In the
+        corner, a callout box: <strong>"Momentum accuracy: 97.2% → 0.0%."</strong></p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Now here's the actual bug. Imagine we write the Momentum update exactly the way the
+        math tells us to, but inside a kernel where every one of 2,048 threads — one per training
+        sample — runs this same line at once. Thread i reads the shared velocity value, computes its
+        own updated version using its own gradient, and writes it back. Thread j does the exact same
+        thing, at almost the same instant, using the same old velocity value it read a moment ago.
+        Whichever thread writes last simply overwrites the other — not delays it, erases it. There's no
+        error message, no crash, no compiler warning. The code runs, the network trains, the loss even
+        looks like it's moving at first. But the optimizer's memory has been silently corrupted on every
+        one of roughly eighteen thousand weights, every single batch. And the empirical result is not
+        subtle: Momentum's accuracy collapses from 97.2 percent to 0.0 percent — indistinguishable from
+        a network that was never trained at all.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>This is the emotional and intellectual center of the talk — the "wait, that's a real bug"
+        moment. Everything before this slide was setup; everything after it is resolution. Give it the
+        time it needs and let the "0.0%" land with a pause before you move on.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Eq. 4 from the paper</span><span class="figchip">optional: Table II "before" column only</span></div>
+      <div class="block codeblk">
+        <span class="label"><span class="swatch"></span>Code to show</span>
+        <pre><code><span class="c">// naive (WRONG) — one thread per SAMPLE, all racing on the same v</span>
+v = beta * v + grad_i;   <span class="c">// read, then compute, then write — three separate steps</span>
+theta -= lr * v;          <span class="c">// another thread may have already changed v by now</span></code></pre>
+      </div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">read-modify-write</span><span class="kwchip">silently corrupted</span>
+        <span class="kwchip">0.0% accuracy</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul>
+          <li>The <span class="mono">v</span> symbol appearing in both "Thread i" and "Thread j" — same
+          variable, two readers.</li>
+          <li>The "0.0%" number — point, then pause for a full second before continuing.</li>
+        </ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Why doesn't <code class="mono">atomicAdd</code> already fix
+        this?</p>
+        <p class="a"><code class="mono">atomicAdd</code> only makes the addition itself indivisible — it
+        guarantees no other thread interrupts that one add. But the Momentum formula is "read the old
+        velocity, multiply by beta, add the gradient, write back" — several steps. An atomic protects
+        one step, not the whole sequence, so the read and the write can still be split apart by another
+        thread's operation in between.</p></div>
+        <div class="qapair"><p class="q">Does this affect Adam too, or just Momentum?</p>
+        <p class="a">Any optimizer with persistent, cross-step state is affected — Momentum's velocity,
+        Adam's first and second moment estimates, RMSProp, LAMB. Plain SGD has no such state, so it's
+        the one exception, which is actually part of why the bug is easy to miss: if you test SGD
+        first, everything looks correct.</p></div>
+        <div class="qapair"><p class="q">How did you first notice something was wrong?</p>
+        <p class="a">The signature was unmistakable: Momentum and Adam collapsed to exactly the accuracy
+        of random guessing on a 10-class problem — about 10 percent, or in some runs even lower — while
+        the loss curve and code both looked superficially normal. That specific failure mode pointed
+        straight at optimizer-state corruption rather than a hyperparameter or data issue.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't show messy real source code here — three lines of clean pseudocode teaches the bug
+          faster than forty lines of your actual kernel.</li>
+          <li>Don't call it "just a bug" — frame it as a subtle, load-bearing correctness issue that
+          compiles clean and produces no error, which is precisely what makes it dangerous.</li>
+          <li>Don't explain CUDA's hardware-level atomic implementation in depth here — that's a
+          rabbit hole this audience doesn't need; keep the focus on the read/write ordering problem.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 6 ============ -->
+    <section class="slide" id="s6">
+      <div class="slide-head">
+        <span class="slide-num">Slide 06 / 12</span>
+        <h2>The fix: Two-Phase Gradient Accumulation</h2>
+        <span class="dur-badge">≈ 1:35</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>A simplified version of Algorithm 1 — two labeled boxes, "Phase 1" and "Phase 2," with the
+        code snippet underneath each. Name the technique in large text at the top:
+        <strong>"Two-Phase Gradient Accumulation (2PGA)."</strong></p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Our fix doesn't add locks, doesn't add warp-level tricks, and doesn't tolerate stale
+        data. It changes who owns what memory, at two different points in the batch. In Phase 1, every
+        thread still runs in parallel, but the only thing it's allowed to do to shared memory is add a
+        number to it, using CUDA's atomicAdd — which is genuinely safe here, because addition is
+        commutative: it doesn't matter what order two thousand additions happen in, the sum comes out
+        the same either way. Once every thread has finished — enforced by a single hardware
+        synchronization barrier — we launch a second kernel. But this time, instead of one thread per
+        training sample, we launch one thread per weight. Thread k touches weight k, and nothing else.
+        Nobody else is racing it. So the full Momentum or Adam formula — the one with the read, the
+        multiply, the write — runs exactly once, by exactly one owner, with zero concurrent writers. No
+        atomics are even needed in this phase, because there's no race left to arbitrate. And I want to
+        stress this: this is not slower mini-batch SGD in disguise. Phase 1 already produced the correct
+        summed gradient before our fix and after it — nothing changes there. The entire fix lives in
+        Phase 2 alone.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>This is the paper's central contribution — give it the most rhetorical weight in the whole
+        talk. The goal is for one phrase to survive in the audience's memory after the talk ends:
+        "Two-Phase Gradient Accumulation — many writers for the sum, one owner for the state."</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Fig. 1 again (callback)</span><span class="figchip">Algorithm 1</span></div>
+      <div class="block codeblk">
+        <span class="label"><span class="swatch"></span>Code to show</span>
+        <pre><code><span class="c">// Phase 1 — many threads, safe because "+" commutes</span>
+atomicAdd(&grad_w[i], sample_gradient);
+
+<span class="c">// barrier — wait for every thread to finish</span>
+cudaDeviceSynchronize();
+
+<span class="c">// Phase 2 — ONE thread owns EACH weight; no race possible</span>
+g = grad_w[i] / batch_size;
+v = beta * v + g;
+theta[i] -= lr * v;</code></pre>
+      </div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">commutative</span><span class="kwchip">single owner</span>
+        <span class="kwchip">synchronization barrier</span><span class="kwchip">Two-Phase Gradient Accumulation</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul>
+          <li>The <span class="mono">atomicAdd</span> line, then trace down to the barrier line.</li>
+          <li>"one thread per weight" — hold your point there for a beat, it's the key sentence.</li>
+        </ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Doesn't the synchronization barrier cost you performance?</p>
+        <p class="a">Measurably, but small. For our 128×128 network, Phase 2 touches about 18,000
+        weights and finishes in under 0.01 milliseconds — under half a percent of one epoch's time. And
+        the argument scales: however many parameters you have, you assign one thread per weight across
+        enough blocks; "one owner per address" stays true no matter the parameter count, which is why we
+        frame this as compatible with much larger, Transformer-scale models.</p></div>
+        <div class="qapair"><p class="q">Does this generalize beyond Momentum and Adam?</p>
+        <p class="a">Yes — the decomposition doesn't depend on the specific update formula. It depends
+        only on separating what's commutative (gradient summation) from what isn't (a stateful
+        recurrence). Any optimizer with cross-step state — RMSProp, LAMB, Adagrad — has the identical
+        failure mode and the identical fix.</p></div>
+        <div class="qapair"><p class="q">Why not just use a mutex or lock instead?</p>
+        <p class="a">Locks would serialize access to shared state, but at massive throughput cost —
+        thousands of threads contending for the same lock on the same address is a severe bottleneck on
+        a GPU. 2PGA gets the same correctness with no locking at all, because Phase 2 removes the
+        contention structurally rather than arbitrating it.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't undersell this as "we just moved some code around" — the insight is realizing
+          <em>which operations commute and which don't</em>, and restructuring thread ownership around
+          that distinction.</li>
+          <li>Don't forget to actually say the name "Two-Phase Gradient Accumulation" out loud, clearly,
+          at least once — it's the one term you want people repeating back to you afterward.</li>
+          <li>Don't let this slide run past 100 seconds even though it's the most important one — a
+          long, meandering explanation of your best idea is worse than a tight one.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 7 ============ -->
+    <section class="slide" id="s7">
+      <div class="slide-head">
+        <span class="slide-num">Slide 07 / 12</span>
+        <h2>Correct batch normalization on GPU</h2>
+        <span class="dur-badge">≈ 0:55</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>The BN equations (paper Eq. 2–3) at the top, small. Below, a simple five-box pipeline diagram
+        you draw yourself: <span class="mono">linear → sync → stats → normalize → activate</span>, each
+        box connected by an arrow, with the sync step visually distinct (e.g. a vertical bar or gate
+        icon) from the rest.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Batch normalization adds one more correctness wrinkle. To normalize a neuron's
+        values, you need the mean and variance of that neuron across the entire batch — which means
+        every one of 2,048 samples' values has to already be written to memory before anyone can safely
+        read them to compute a mean. A single, one-shot kernel launch can't guarantee that, because
+        different thread blocks run in an undefined order relative to each other, with no built-in way
+        to signal "everyone's done." So we broke the batch-norm forward pass into a short pipeline of
+        small kernels — compute the linear layer, synchronize, compute the batch statistics with a
+        parallel reduction, apply the normalization, then activate — and mirrored the same structure
+        going backward. Each synchronization point in between guarantees every sample's contribution is
+        visible before the next kernel reads it.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>It's the paper's second contribution, and it reuses the exact same "you need a barrier before
+        anyone reads shared results" logic from Slide 6 — which makes it feel like reinforcement rather
+        than a brand-new idea, and keeps this slide brisk.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Eq. 2–3</span><span class="figchip">your own pipeline sketch (no paper figure for this)</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None required — if you have extra time, one line naming the kernel sequence
+        is enough: <span class="mono">fwd_linear → bn_stats → bn_apply → activation</span>.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">batch statistics</span><span class="kwchip">parallel reduction</span>
+        <span class="kwchip">explicit barrier</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>Trace along your pipeline diagram left to right, pausing visibly at the sync gate.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Why not just synchronize once at the very end instead of once
+        per layer?</p>
+        <p class="a">Because each hidden layer's batch statistics depend on that layer's own linear
+        output, which depends on the previous layer already being fully normalized and activated. The
+        dependency chain is layer by layer, so the barrier has to be too — one synchronization at the
+        end would let later layers read incomplete earlier results.</p></div>
+        <div class="qapair"><p class="q">Does this add much overhead compared to training without batch
+        norm?</p>
+        <p class="a">Yes, measurably — our BN configurations run about 25–30% slower per epoch than the
+        equivalent non-BN configuration, from the extra kernel launches and synchronization points. We
+        see that as future kernel-fusion work rather than a flaw in the correctness argument itself.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't let this slide compete with Slide 6 for the audience's attention — keep it short and
+          clearly secondary in the talk's structure.</li>
+          <li>Don't derive the batch-norm backward-pass math on the slide — name that it exists (the
+          closed-form Ioffe–Szegedy identity) without deriving it live.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 8 ============ -->
+    <section class="slide" id="s8">
+      <div class="slide-head">
+        <span class="slide-num">Slide 08 / 12</span>
+        <h2>Experimental setup</h2>
+        <span class="dur-badge">≈ 0:35</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>A compact two-column key/value list — no full sentences: GPU: RTX A2000, 12GB, sm_86 ·
+        Compiler: nvcc -O2 + g++-12 · Dataset: MNIST, 60k/10k · Network: 2×128 · Epochs/Batch: 20 / 2048
+        · Split: 48k train / 12k val / 10k test · Init: Xavier, seed 42.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Quickly, on methodology: everything ran on a single NVIDIA RTX A2000 with 12
+        gigabytes of memory, Ampere architecture, compiled with nvcc and g++-12. We use standard MNIST —
+        60,000 training and 10,000 test images — with an 80/20 split carving out 12,000 validation
+        images, so every epoch is a genuine full pass over 48,000 training samples in 23 mini-batches of
+        2,048. All experiments use the same two-hidden-layer, 128-neuron network, trained for 20 epochs,
+        with Xavier initialization and a fixed random seed for reproducibility.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>A required conference-talk beat — reviewers need to know your results are reproducible and
+        fairly measured — but it's not where your value is. Read it cleanly and move on; don't let
+        methodology eat into your results time.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">none — key/value table only</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">RTX A2000</span><span class="kwchip">23 mini-batches / epoch</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>Nothing special — this slide should feel like a fast, confident recitation, not a
+        pointing exercise.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Why 2,048 as the batch size specifically?</p>
+        <p class="a">We profiled batch-size scaling separately (reported in the paper's Table V): GPU
+        utilization keeps climbing through 4,096, but 2,048 is the practical sweet spot on this GPU —
+        past it, Phase 2's synchronization overhead starts growing faster than the throughput gain, about
+        17% more epoch time at 4,096 versus 2,048.</p></div>
+        <div class="qapair"><p class="q">Only one GPU, one seed — how confident are you in these
+        numbers?</p>
+        <p class="a">Fair challenge — this is a single-GPU, single-seed study, and we say so directly in
+        the paper's limitations. What we're confident about is the qualitative result: the exact same
+        code, with only the parallelization strategy changed, moves from 0% to 97%. That's not a
+        borderline effect sensitive to a particular seed.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't spend more than 40 seconds here even if you feel like justifying every hyperparameter
+          — save that depth for Q&amp;A, where it'll actually be asked for.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 9 ============ -->
+    <section class="slide" id="s9">
+      <div class="slide-head">
+        <span class="slide-num">Slide 09 / 12</span>
+        <h2>Results I — recovery from the race condition</h2>
+        <span class="dur-badge">≈ 1:10</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>Figure 4 (grouped before/after bar chart), full width, with the four recovery deltas
+        (+97.2 pp, +97.2 pp, +63.1 pp) visible as data labels on the bars.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>Here's the headline result. Before our fix, Momentum and Adam both collapse to zero
+        percent accuracy — literally random guessing on a ten-class problem. After the fix, both recover
+        to 97.2 percent — a 97.2 percentage-point swing, from a completely broken network to our
+        best-performing configuration, with no other change to the code. Batch-norm-plus-Adam shows the
+        same pattern at a different scale: 17.9 percent before, 81 percent after — a real recovery, even
+        though that configuration has its own separate story, which I'll come back to. SGD, which has no
+        persistent optimizer state, is completely unaffected by this fix — its own improvement to 94.3
+        percent comes from an unrelated change, moving to full-dataset epochs. That's actually a useful
+        control: it confirms the fix is doing exactly what we claim, and nothing else.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>This is the payoff — deliver the paper's strongest, most quotable numbers with total
+        confidence. Let "zero to ninety-seven point two" land as a full sentence on its own, with a
+        pause on either side.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Fig. 4 — required</span><span class="figchip">reference Table II verbally</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None — this is a pure results slide.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">0.0% → 97.2%</span><span class="kwchip">unaffected (control)</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>Each before/after bar pair as you name its numbers — hatched bar first, solid bar
+        second.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Could the 0% before-fix number be caused by something else,
+        like a bad learning rate?</p>
+        <p class="a">No — we used the exact same learning rate, initialization, and seed in both runs;
+        the only variable that changed is whether the optimizer update is applied per-sample (racy) or
+        in the two-phase form. And 0% is a very specific signature — it isn't "worse convergence," it's
+        exactly what you'd expect from an optimizer state that's pure noise.</p></div>
+        <div class="qapair"><p class="q">Is 0% reproducible, or a one-time fluke?</p>
+        <p class="a">Reproducible — it's deterministic given the race, not a rare event; with 2,048
+        threads racing on every one of roughly 18,000 weights every batch, the corruption isn't an edge
+        case, it's the expected outcome of that design.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't rush past the "0.0% to 97.2%" number — it's the single most important sentence in
+          your talk; say it deliberately, not as a list item.</li>
+          <li>Don't gloss over the BN+Adam+LR number here without flagging you'll return to it — an
+          audience member doing the math (81% is well below 97.2%) will otherwise wonder if you noticed.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 10 ============ -->
+    <section class="slide" id="s10">
+      <div class="slide-head">
+        <span class="slide-num">Slide 10 / 12</span>
+        <h2>Results II — speed &amp; optimizer comparison</h2>
+        <span class="dur-badge">≈ 1:25</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>Figure 3 (log-scale time/speedup chart) on the left half; a condensed 4-row version of
+        Table III (SGD / Momentum / Adam / Adam+LR final accuracy only — drop the BN rows here, they
+        belong to Slide 11) on the right half.</p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>On raw throughput: our serial CPU baseline takes about 2,070 seconds per epoch;
+        every CUDA configuration finishes in roughly one second — SGD at 0.94 seconds is a 2,202-times
+        speedup, and even our heaviest configuration still holds well over a thousand-times speedup. On
+        accuracy, Momentum and Adam are statistically tied at 97.2 percent, both roughly 3 points above
+        plain SGD, and both converge to within about a point of their final accuracy within just 5 of the
+        20 epochs — Adam's adaptive per-weight step size gives it a real head start early on.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>Standard "how fast, how accurate" conference beat. Pick three or four headline numbers and
+        say them with confidence rather than trying to narrate every cell of every table — a wall of
+        numbers read aloud is the fastest way to lose an audience's attention.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Fig. 3 — required</span><span class="figchip">Table I / III (condensed)</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">2,202× speedup</span><span class="kwchip">97.2%</span>
+        <span class="kwchip">adaptive moment estimates</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>The log-scale axis on Fig. 3 — explicitly note it's log scale, and briefly say why (the
+        gap between CPU and GPU times spans three orders of magnitude; a linear axis would make every
+        GPU bar look like zero).</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Is the CPU baseline a fair comparison?</p>
+        <p class="a">We measured a completed 20-epoch serial run to verify this — it averages about
+        2,070 seconds per epoch, matching our original projection almost exactly, so the reported
+        speedups hold up against a real completed measurement, not just an estimate.</p></div>
+        <div class="qapair"><p class="q">Why does Adam need a smaller learning rate (0.01) than SGD or
+        Momentum (0.1)?</p>
+        <p class="a">Adam's per-weight adaptive scaling — dividing by the square root of a running
+        second-moment estimate — already amplifies small, consistent gradients, so a learning rate tuned
+        for plain SGD would overshoot badly with Adam; 0.01 is the standard order-of-magnitude choice
+        in the literature and what we found stable in practice.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't read every row of every table — pick your best three or four numbers and deliver
+          them with weight; the slide itself carries the rest for anyone who wants detail.</li>
+          <li>Don't skip explaining the log scale — an unexplained log axis reads as either a mistake or
+          an attempt to exaggerate the speedup, and you want neither impression.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 11 ============ -->
+    <section class="slide" id="s11">
+      <div class="slide-head">
+        <span class="slide-num">Slide 11 / 12</span>
+        <h2>The BN+Adam anomaly — an honest limitation</h2>
+        <span class="dur-badge">≈ 0:55</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>Figure 5 (BN impact bar chart), plus one annotated line under it: <strong>"Peaks 88.1% at
+        epoch 2 → declines to 81.0% by epoch 20."</strong></p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>I want to spend one slide being upfront about a result that didn't go the way we
+        expected. When we combine batch normalization with Adam and a learning-rate schedule, accuracy
+        actually peaks early — 88.1 percent at epoch 2 — and then steadily declines to 81 percent by
+        epoch 20. That's not slow convergence, that's instability: something is actively getting worse
+        over training, not just improving slowly. We checked whether the learning-rate schedule itself
+        was the cause by switching from a per-epoch to a per-batch cosine decay, and that only recovered
+        about one point — so the schedule isn't the main culprit. Our leading hypothesis is a genuine
+        interaction between Adam's evolving moment estimates and batch normalization's own evolving
+        statistics — two different kinds of memory that may be working against each other during
+        training. We think a batch-norm-aware optimizer, with decoupled learning rates for the
+        normalization parameters, is the right next step, and we've left it as future work rather than
+        smoothing it over.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>Conference audiences trust a presenter more, not less, for reporting an inconvenient result
+        clearly. This slide also pre-empts the single most likely tough question — "why is your
+        flagship configuration your worst result?" — by answering it before anyone has to ask.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Fig. 5 — required</span><span class="figchip">Table IV (epoch progression), optional</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">instability, not slow convergence</span><span class="kwchip">BN+Adam interaction</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>The peak of the curve at epoch 2, then trace the decline with your finger all the way to
+        epoch 20 — the shape itself is the argument.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">If BN+Adam+LR is your worst configuration, why include it as a
+        flagship feature at all?</p>
+        <p class="a">Because the paper's contribution isn't "BN+Adam+LR is the best configuration" — it's
+        the two-phase gradient accumulation mechanism, which BN+Adam+LR also depends on and benefits from
+        equally. We report this result specifically because omitting an inconvenient number would
+        undermine the credibility of every other accuracy figure in the paper.</p></div>
+        <div class="qapair"><p class="q">Have you tried simply lowering Adam's learning rate for this
+        configuration?</p>
+        <p class="a">Not exhaustively — that's exactly the kind of decoupled-learning-rate direction we
+        flag as future work. Our diagnosis so far rules out the LR *schedule* as the main cause (the
+        per-batch cosine fix only recovered about a point); a smaller base LR specifically for BN
+        parameters is a distinct, untested hypothesis.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't get defensive or apologetic — deliver this as evidence of rigor, in the same
+          confident tone as your best number.</li>
+          <li>Don't try to explain it away with a hand-wavy guess stated as fact — say clearly that it's
+          a hypothesis, not a proven diagnosis.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ SLIDE 12 ============ -->
+    <section class="slide" id="s12">
+      <div class="slide-head">
+        <span class="slide-num">Slide 12 / 12</span>
+        <h2>Edge AI case, conclusion &amp; future work</h2>
+        <span class="dur-badge">≈ 1:10</span>
+      </div>
+
+      <div class="block onslide">
+        <span class="label"><span class="swatch"></span>What's on the slide</span>
+        <p>A condensed 3-row version of Table VI (Test Accuracy / Peak VRAM / Install Size, CUDAnet vs.
+        PyTorch) at the top. Below it, three future-work bullets: Tensor Cores (WMMA), convolutional
+        layers (im2col), multi-GPU (NCCL). A final line: <strong>"Thank you."</strong></p>
+      </div>
+
+      <div class="block say">
+        <span class="label"><span class="swatch"></span>Say this, word for word</span>
+        <blockquote>One more result before I close. Because CUDAnet has no framework dependency at all —
+        just libcuda — the compiled binary is under 2 megabytes, versus roughly 1.8 gigabytes for an
+        equivalent PyTorch install, and its peak VRAM footprint is about 470 kilobytes versus 248
+        megabytes. PyTorch is faster per epoch and slightly more accurate, thanks to cuDNN and cuBLAS
+        under the hood — we're not claiming otherwise — but on a memory-constrained edge device, that
+        five-hundred-times difference in footprint is the entire ballgame. To conclude: we identified a
+        genuine, silent correctness bug in how stateful optimizers get parallelized on GPUs, we fixed it
+        with a general two-phase accumulation pattern that costs less than half a percent of runtime,
+        and we validated it end to end on real hardware with a two-thousand-times speedup over a serial
+        baseline. For future work, we're looking at wiring up true Tensor Core kernels for a further two
+        to three times speedup, extending to convolutional layers via im2col to push past MNIST toward
+        CIFAR-10, and scaling across multiple GPUs with NCCL — which, importantly, requires no change at
+        all to the core two-phase correctness argument. Thank you — I'm happy to take questions.</blockquote>
+      </div>
+
+      <div class="block why">
+        <span class="label"><span class="swatch"></span>Why this slide exists</span>
+        <p>Closes with the practical "why this matters beyond a benchmark" (edge deployment), then a
+        tight restatement of the contribution, ending on an explicit, natural handoff into Q&amp;A rather
+        than trailing off.</p>
+      </div>
+
+      <div class="block figs"><span class="label"><span class="swatch"></span>Figures to show</span>
+        <span class="figchip">Table VI (condensed)</span></div>
+      <div class="block codeblk"><span class="label"><span class="swatch"></span>Code to show</span>
+        <p class="none">None.</p></div>
+      <div class="block keywords"><span class="label"><span class="swatch"></span>Keywords to land</span>
+        <span class="kwchip">under 2 MB</span><span class="kwchip">libcuda.so</span><span class="kwchip">NCCL AllReduce</span></div>
+      <div class="block pointat"><span class="label"><span class="swatch"></span>What to point at</span>
+        <ul><li>The VRAM and install-size numbers side by side — let the visual gap do the persuading.</li></ul></div>
+
+      <div class="block qa">
+        <span class="label"><span class="swatch"></span>Likely questions</span>
+        <div class="qapair"><p class="q">Have you actually deployed this on a Jetson or other edge
+        device?</p>
+        <p class="a">Not yet in this paper — the footprint comparison is measured on our development GPU,
+        and Jetson deployment is exactly the next validation step we describe under future work. We'd
+        want to confirm the same binary-size and VRAM advantages hold on that hardware before making a
+        stronger deployment claim.</p></div>
+        <div class="qapair"><p class="q">What's the single most important takeaway you want us to
+        leave with?</p>
+        <p class="a">That parallel correctness is not the same as sequential correctness — an algorithm
+        that's mathematically right on paper can still corrupt itself the moment you parallelize it
+        naively, and Two-Phase Gradient Accumulation is a general, low-cost pattern for any stateful
+        optimizer that needs to run safely across thousands of GPU threads.</p></div>
+      </div>
+      <div class="block mistakes">
+        <span class="label"><span class="swatch"></span>Mistakes to avoid</span>
+        <ul>
+          <li>Don't introduce brand-new numbers in your very last sentence — give the audience a beat to
+          sit with the closing thought before you say "thank you."</li>
+          <li>Don't just trail off ("...so yeah, that's basically it") — end on the explicit, rehearsed
+          line above and make eye contact as you say it.</li>
+        </ul>
+      </div>
+    </section>
+
+    <hr class="div"/>
+
+    <section id="bonus">
+      <div class="eyebrow" style="font-family:ui-monospace,Consolas,monospace; font-size:.76rem; color:var(--accent-ink); text-transform:uppercase; letter-spacing:.1em;">Bonus</div>
+      <h2>If someone in the audience goes off-script</h2>
+      <p style="max-width:68ch;">These aren't in the paper's own text, but they're things I found while
+      reading your actual source code during an earlier deep review. A sharp question could land on any
+      of them — you don't need to volunteer these, but you should never look surprised if asked.</p>
+
+      <div class="bonus">
+        <p><strong>"Does your Tensor Core (WMMA) build actually use Tensor Cores?"</strong><br/>
+        Honest answer: not currently. The true WMMA kernels exist in the source and are architecturally
+        correct, but a preprocessor flag issue means the <span class="mono">cuda_wmma</span> binary
+        doesn't actually engage them yet — this is exactly why the paper correctly lists Tensor Core
+        integration as future work rather than a delivered result. If asked directly: "That's accurate —
+        the WMMA kernels are implemented but not yet wired into the default build; validating that path
+        is one of our concrete next steps."</p>
+      </div>
+      <div class="bonus">
+        <p><strong>"Does your Adam implementation's bias-correction step counter increment per
+        mini-batch, as the standard algorithm assumes?"</strong><br/>
+        Honest answer: it currently increments once per epoch rather than once per mini-batch, which is
+        a minor deviation from canonical Adam's bookkeeping. If asked: "Good catch — our current
+        implementation ties the bias-correction step to the epoch counter rather than the mini-batch
+        counter; it's a bookkeeping detail we're aware of and plan to align with the canonical
+        formulation."</p>
+      </div>
+      <div class="bonus">
+        <p><strong>"Is everything in your public repository consistent with these numbers?"</strong><br/>
+        Yes, as of your latest update — the top-level README was revised to match the actual
+        <span class="mono">results/</span> logs and the paper exactly, including correctly identifying
+        Momentum and Adam (not BN+Adam+LR) as the best-performing configurations.</p>
+      </div>
+    </section>
+
+    <footer class="pagefoot">
+      Rehearsal script for the CUDAnet IEEE presentation. Built directly from the manuscript's six
+      sections, all five figures, and all six tables — every number quoted above traces back to the
+      paper or the project's own result logs.
+    </footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section, main #pre'));
+  if (!('IntersectionObserver' in window)) return;
+  var current = null;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if (entry.isIntersecting){
+        if (current) current.classList.remove('active');
+        var link = map[entry.target.id];
+        if (link){ link.classList.add('active'); current = link; }
+      }
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  sections.forEach(function(s){ io.observe(s); });
+})();
+</script>

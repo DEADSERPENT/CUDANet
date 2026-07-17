@@ -1,0 +1,597 @@
+<title>CUDAnet, Explained — One Page, Start to Finish</title>
+<style>
+:root{
+  --bg:#FFFFFF; --panel:#F3F6FA; --panel-2:#EAF1FA;
+  --ink:#182233; --ink-soft:#525C6C; --ink-faint:#7C8697;
+  --rule:#E1E7EF; --rule-strong:#CBD5E3;
+  --accent:#0B5394; --accent-ink:#0B5394; --accent-soft:#E5F0FB;
+  --good:#1E7A46; --good-soft:#E7F4EC;
+  --warn:#B43B2E; --warn-soft:#FBEAE7;
+  --code-bg:#EEF2F8; --code-ink:#1D2939; --code-key:#8A4E16; --code-dim:#7C8697;
+}
+*{box-sizing:border-box;}
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Source Serif 4','Iowan Old Style','Palatino Linotype',Georgia,serif;
+  font-size:17.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+::selection{ background:var(--accent-soft); }
+a{ color:var(--accent-ink); }
+.mono{ font-family:ui-monospace,'SF Mono','Cascadia Code',Consolas,monospace; }
+.chrome{ font-family:-apple-system,'Segoe UI',system-ui,Helvetica,Arial,sans-serif; }
+h1,h2,h3,h4{ font-family:'Source Serif 4','Iowan Old Style',Georgia,serif; font-weight:700; text-wrap:balance; color:var(--ink); }
+
+.shell{ display:grid; grid-template-columns: 280px minmax(0,1fr); }
+@media (max-width: 980px){ .shell{ grid-template-columns: 1fr; } }
+.rail{ border-right:1px solid var(--rule); background:var(--panel); position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; padding:26px 20px 40px; }
+@media (max-width: 980px){ .rail{ position:static; height:auto; border-right:none; border-bottom:1px solid var(--rule); } }
+.rail-brand{ font-weight:700; font-size:1.05rem; }
+.rail-brand .dot{ color:var(--accent); }
+.rail-sub{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.72rem; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+.toc{ margin:18px 0 0; padding:0; list-style:none; }
+.toc a{ display:block; padding:6px 8px; border-radius:4px; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.83rem; color:var(--ink-soft); text-decoration:none; }
+.toc a:hover{ background:var(--panel-2); color:var(--ink); }
+.toc a.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
+.toc .num{ font-family:ui-monospace,Consolas,monospace; font-size:.72rem; color:var(--ink-faint); margin-right:8px; }
+
+main{ padding:48px clamp(20px,4vw,76px) 120px; max-width:880px; }
+.kicker{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.76rem; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700; }
+h1.title{ font-size:clamp(1.9rem,4vw,2.6rem); line-height:1.15; margin:.4em 0 .3em; }
+.dek{ color:var(--ink-soft); font-size:1.12rem; max-width:62ch; }
+
+.statstrip{ display:flex; flex-wrap:wrap; gap:10px; margin:24px 0 6px; }
+.statcard{ flex:1 1 150px; background:var(--panel); border:1px solid var(--rule); border-radius:8px; padding:14px 16px; }
+.statcard .big{ font-family:ui-monospace,Consolas,monospace; font-size:1.5rem; font-weight:700; color:var(--accent); }
+.statcard .cap{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.74rem; color:var(--ink-faint); margin-top:2px; }
+
+section.sec{ margin-top:56px; scroll-margin-top:20px; }
+.sec .eyebrow{ font-family:ui-monospace,Consolas,monospace; font-size:.72rem; letter-spacing:.1em; color:var(--accent); text-transform:uppercase; margin-bottom:6px; }
+.sec h2{ font-size:1.55rem; margin:0 0 .5em; padding-bottom:.35em; border-bottom:2px solid var(--rule); }
+.sec h3{ font-size:1.12rem; margin:1.5em 0 .5em; }
+.sec p{ max-width:70ch; }
+.sec ul, .sec ol{ max-width:68ch; padding-left:1.25em; }
+.sec li{ margin:.35em 0; }
+
+.tldr{ background:var(--panel); border-left:4px solid var(--accent); border-radius:0 8px 8px 0; padding:14px 20px; margin:18px 0; }
+.tldr .tag{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); display:block; margin-bottom:4px; }
+.tldr p{ margin:.3em 0; }
+
+.callout-good{ background:var(--good-soft); border:1px solid #cfe8d8; border-radius:6px; padding:14px 18px; margin:18px 0; }
+.callout-good .tag{ font-family:ui-monospace,Consolas,monospace; font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--good); display:block; margin-bottom:5px; }
+.callout-warn{ background:var(--warn-soft); border:1px solid #f0cec8; border-radius:6px; padding:14px 18px; margin:18px 0; }
+.callout-warn .tag{ font-family:ui-monospace,Consolas,monospace; font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--warn); display:block; margin-bottom:5px; }
+
+pre{ background:var(--code-bg); color:var(--code-ink); border:1px solid var(--rule-strong); border-radius:6px; padding:14px 18px; overflow-x:auto; font-size:.83rem; line-height:1.55; margin:14px 0; }
+pre code{ font-family:ui-monospace,Consolas,monospace; }
+pre .c{ color:var(--code-dim); } pre .k{ color:var(--code-key); }
+code.k{ font-family:ui-monospace,Consolas,monospace; background:var(--panel); border:1px solid var(--rule); padding:.05em .35em; border-radius:3px; font-size:.86em; }
+
+.diagram{ background:var(--panel); border:1px solid var(--rule); border-radius:8px; padding:20px; margin:18px 0; overflow-x:auto; }
+.dflex{ display:flex; align-items:center; gap:0; flex-wrap:nowrap; min-width:max-content; }
+.dbox{ background:#fff; border:1.5px solid var(--rule-strong); border-radius:8px; padding:12px 16px; text-align:center; font-size:.86rem; font-weight:600; color:var(--ink); min-width:110px; }
+.dbox.accent{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink); }
+.dbox.good{ background:var(--good-soft); border-color:var(--good); color:var(--good); }
+.dbox.warn{ background:var(--warn-soft); border-color:var(--warn); color:var(--warn); }
+.darrow{ font-size:1.4rem; color:var(--accent); padding:0 10px; flex-shrink:0; }
+.dcap{ font-family:-apple-system,'Segoe UI',sans-serif; font-size:.76rem; color:var(--ink-faint); text-align:center; margin-top:10px; }
+
+.twrap{ overflow-x:auto; margin:16px 0; border:1px solid var(--rule); border-radius:6px; }
+table{ border-collapse:collapse; width:100%; font-size:.87rem; min-width:480px; }
+thead th{ text-align:left; font-family:-apple-system,'Segoe UI',sans-serif; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); background:var(--panel); padding:9px 13px; border-bottom:1px solid var(--rule); }
+tbody td{ padding:8px 13px; border-bottom:1px solid var(--rule); font-family:ui-monospace,Consolas,monospace; font-variant-numeric:tabular-nums; }
+tbody td.prose{ font-family:'Source Serif 4',Georgia,serif; }
+tbody tr:last-child td{ border-bottom:none; }
+
+.gloss{ display:grid; gap:10px; margin:16px 0; }
+.gterm{ border:1px solid var(--rule); border-radius:6px; padding:12px 16px; background:var(--panel); }
+.gterm .gname{ font-family:ui-monospace,Consolas,monospace; font-weight:700; color:var(--accent-ink); }
+.gterm .gsimple::before{ content:"Simply — "; font-weight:700; color:var(--ink-faint); font-family:-apple-system,'Segoe UI',sans-serif; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
+.gterm .gtech::before{ content:"Technically — "; font-weight:700; color:var(--accent); font-family:-apple-system,'Segoe UI',sans-serif; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
+.gterm p{ margin:.35em 0; font-size:.95rem; }
+
+.qa{ border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; padding:12px 16px; margin:12px 0; background:#fff; }
+.qa .q{ font-weight:700; margin:0 0 5px; }
+.qa .q::before{ content:"Q — "; color:var(--accent); }
+.qa .a{ margin:0; color:var(--ink-soft); }
+.qa .a::before{ content:"A — "; color:var(--good); font-weight:700; }
+
+hr.div{ border:none; border-top:1px solid var(--rule); margin:52px 0; }
+footer.pagefoot{ margin-top:70px; padding-top:22px; border-top:1px solid var(--rule); color:var(--ink-faint); font-family:-apple-system,'Segoe UI',sans-serif; font-size:.78rem; }
+.pill{ display:inline-block; font-family:ui-monospace,Consolas,monospace; font-size:.72rem; padding:2px 9px; border-radius:20px; background:var(--panel); color:var(--ink-soft); border:1px solid var(--rule); }
+</style>
+
+<div class="shell">
+  <nav class="rail chrome" aria-label="Contents">
+    <div class="rail-brand">CUDA<span class="dot">net</span></div>
+    <div class="rail-sub">Everything, one page</div>
+    <ul class="toc" id="toc">
+      <li><a href="#tldr"><span class="num">·</span>60-second summary</a></li>
+      <li><a href="#problem"><span class="num">01</span>The problem</a></li>
+      <li><a href="#fix"><span class="num">02</span>The fix — 2PGA</a></li>
+      <li><a href="#arch"><span class="num">03</span>Architecture</a></li>
+      <li><a href="#training"><span class="num">04</span>How training runs on the GPU</a></li>
+      <li><a href="#optimizers"><span class="num">05</span>SGD, Momentum, Adam</a></li>
+      <li><a href="#bn"><span class="num">06</span>Batch normalization</a></li>
+      <li><a href="#lr"><span class="num">07</span>Learning rate scheduling</a></li>
+      <li><a href="#results"><span class="num">08</span>Results, in plain terms</a></li>
+      <li><a href="#glossary"><span class="num">09</span>Glossary</a></li>
+      <li><a href="#qa"><span class="num">10</span>Questions people ask</a></li>
+      <li><a href="#summary"><span class="num">11</span>Contributions &amp; limits</a></li>
+      <li><a href="#cheatsheet"><span class="num">★</span>One-screen cheat sheet</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div class="kicker">CUDAnet — complete, in one file</div>
+    <h1 class="title">Everything about CUDAnet, explained once</h1>
+    <p class="dek">The project, the bug, the fix, the code, and the results — start to finish, in
+    plain language first and precise language second. No other tabs required.</p>
+
+    <div class="statstrip">
+      <div class="statcard"><div class="big">0% → 97.2%</div><div class="cap">Accuracy recovered by the fix</div></div>
+      <div class="statcard"><div class="big">2,202×</div><div class="cap">Faster than serial CPU</div></div>
+      <div class="statcard"><div class="big">&lt; 2 MB</div><div class="cap">Whole engine, no frameworks</div></div>
+      <div class="statcard"><div class="big">&lt; 0.5%</div><div class="cap">Runtime cost of the fix</div></div>
+    </div>
+
+    <div class="tldr" id="tldr">
+      <span class="tag">60-second summary</span>
+      <p>CUDAnet is a neural network trainer written by hand in CUDA — no PyTorch, no TensorFlow.
+      Training a network on a GPU means splitting the work across thousands of tiny parallel workers
+      called <strong>threads</strong>. That's safe for most of the math — but two popular training
+      algorithms, <strong>Momentum</strong> and <strong>Adam</strong>, keep a running memory that every
+      thread wants to update at once. Update it naively, and thousands of threads silently overwrite
+      each other's work — accuracy collapses to <strong>0%</strong>, with no error message at all.</p>
+      <p>The fix — <strong>Two-Phase Gradient Accumulation (2PGA)</strong> — splits every update into
+      two steps: first let all threads safely <em>add up</em> their contributions (safe, because
+      addition doesn't care about order), then let exactly <em>one</em> thread per weight apply the
+      real update (safe, because nobody else is touching that memory at the same time). That one
+      change takes accuracy from 0% back to 97.2%, at a cost of under half a percent of runtime.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="problem">
+      <div class="eyebrow">01 — The Problem</div>
+      <h2>Why parallel training has a blind spot</h2>
+      <p>A GPU trains a network by giving each image in a batch to its own thread. Every thread runs
+      the network forward, sees how wrong its prediction was, and works out how each weight should
+      change. As long as every thread's work stays separate, this is perfectly safe — thousands of
+      threads can run at the exact same instant with no conflict at all.</p>
+
+      <div class="diagram">
+        <div class="dflex">
+          <div class="dbox accent">GPU</div><div class="darrow">→</div>
+          <div class="dbox accent">2,048 threads</div><div class="darrow">→</div>
+          <div class="dbox warn">shared memory</div>
+        </div>
+        <div class="dcap">Every thread wants to update the SAME optimizer memory at the SAME instant — nothing enforces an order.</div>
+      </div>
+
+      <p>The trouble starts at the update step. Plain gradient descent (SGD) has no memory between
+      steps — every update stands alone. But Momentum and Adam are built to <em>remember</em>: Momentum
+      keeps a running "velocity," Adam keeps two running "moment" estimates. All 2,048 threads want to
+      read, update, and write back that same shared memory at once. Whichever thread writes last simply
+      erases what every other thread just did — silently, with no crash and no warning.</p>
+
+      <div class="callout-warn">
+        <span class="tag">What actually happens if you don't fix this</span>
+        <p>Momentum's accuracy collapses from 97.2% to <strong>0.0%</strong> — indistinguishable from a
+        network that was never trained. Adam does the same. Both fail this way because
+        <code class="k">atomicAdd</code>, the one safety tool CUDA gives you, only protects a single
+        addition — not the full "read, multiply, add, write back" recipe that Momentum and Adam
+        actually need.</p>
+      </div>
+
+      <h3>Why this bug hides so well</h3>
+      <ul>
+        <li>The code compiles and runs without any error — races don't throw exceptions.</li>
+        <li>SGD, which has no memory to corrupt, keeps working fine — so testing SGD first looks like
+        proof the whole approach is sound.</li>
+        <li>Frameworks like PyTorch never let you write the buggy version in the first place — the
+        optimizer step is always a separate call from the backward pass, so this failure mode is
+        invisible to anyone who has only ever trained through a framework.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="fix">
+      <div class="eyebrow">02 — The Fix</div>
+      <h2>Two-Phase Gradient Accumulation (2PGA)</h2>
+      <p>The fix doesn't add locks or exotic hardware tricks. It changes <em>who is allowed to touch
+      what memory</em>, at two separate moments in the same batch.</p>
+
+      <div class="diagram">
+        <div class="dflex">
+          <div class="dbox accent">PHASE 1<br/><span style="font-weight:400;font-size:.8em;">2,048 threads<br/>atomicAdd only</span></div>
+          <div class="darrow">→</div>
+          <div class="dbox" style="color:var(--ink-faint);border-style:dashed;">SYNC</div>
+          <div class="darrow">→</div>
+          <div class="dbox good">PHASE 2<br/><span style="font-weight:400;font-size:.8em;">1 thread per weight<br/>full formula, no race</span></div>
+        </div>
+        <div class="dcap">Phase 1 only ever sums numbers — safe, because addition doesn't care about order.<br/>Phase 2 gives each weight exactly one owner — safe, because there's no one left to race against.</div>
+      </div>
+
+      <pre><code><span class="c">// Phase 1 — many threads, safe because "+" is commutative</span>
+atomicAdd(&grad_w[i], sample_gradient);
+
+<span class="c">// barrier — wait until EVERY thread has finished Phase 1</span>
+cudaDeviceSynchronize();
+
+<span class="c">// Phase 2 — ONE thread owns EACH weight; nobody else can touch it</span>
+g = grad_w[i] / batch_size;      <span class="c">// average the batch</span>
+v = beta * v + g;                 <span class="c">// the real Momentum/Adam formula</span>
+theta[i] -= lr * v;               <span class="c">// applied exactly once</span></code></pre>
+
+      <p>This isn't "slower mini-batch SGD in disguise." Phase 1 was already producing the correct
+      summed gradient before this fix existed — nothing changes there. The entire fix lives in Phase 2
+      alone: give every weight exactly one thread that's allowed to touch it, and the race disappears
+      by construction, not by locking or waiting it out.</p>
+
+      <div class="callout-good">
+        <span class="tag">Cost of the fix</span>
+        <p>For the 128×128 network in this project, Phase 2 touches about 18,000 weights and finishes
+        in under 0.01 milliseconds — under 0.5% of one epoch's time. The idea scales to any number of
+        parameters: assign one thread per weight, across as many blocks as needed, and "exactly one
+        owner per address" stays true no matter how large the model gets.</p>
+      </div>
+
+      <h3>The evidence, in the actual source code</h3>
+      <p>The codebase still contains two functions — <code class="k">update_param_momentum</code> and
+      <code class="k">update_param_adam</code> — that implement the <em>old, broken</em> approach.
+      They're defined but never called from anywhere; they're the fossil record of the exact bug this
+      fix resolves. Reading them side by side with the real, working
+      <code class="k">apply_optimizer_update</code> kernel is the clearest way to see the difference
+      between "one atomic call that looks safe" and "actually safe."</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="arch">
+      <div class="eyebrow">03 — Architecture</div>
+      <h2>What CUDAnet actually is</h2>
+      <p>Strip away the CUDA and it's an ordinary multi-layer perceptron: pixels in, a digit out.</p>
+
+      <div class="diagram">
+        <div class="dflex">
+          <div class="dbox accent">Input<br/>784</div><div class="darrow">→</div>
+          <div class="dbox">Hidden 1<br/>128</div><div class="darrow">→</div>
+          <div class="dbox">Hidden 2<br/>128</div><div class="darrow">→</div>
+          <div class="dbox accent">Output<br/>10</div>
+        </div>
+        <div class="dcap">784 → 128 → 128 → 10, fully configurable at runtime. ReLU on hidden layers, softmax on the output.</div>
+      </div>
+
+      <ul>
+        <li>Optional Batch Normalization after every hidden linear layer.</li>
+        <li>Every weight and bias lives in <strong>one flat array</strong> on the GPU — no
+        objects, no pointers, just precomputed offsets. A weight's address is one multiply-add away,
+        which is exactly what a GPU's memory system prefers.</li>
+        <li>The whole network shape (layer sizes, memory offsets) is described by one small struct that
+        gets passed into every kernel — cheap enough to pass by value rather than by pointer.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="training">
+      <div class="eyebrow">04 — Mechanics</div>
+      <h2>How one training step actually runs on the GPU</h2>
+
+      <h3>The five stages</h3>
+      <div class="diagram">
+        <div class="dflex">
+          <div class="dbox">Init</div><div class="darrow">→</div>
+          <div class="dbox">Forward</div><div class="darrow">→</div>
+          <div class="dbox">Loss</div><div class="darrow">→</div>
+          <div class="dbox">Backward</div><div class="darrow">→</div>
+          <div class="dbox good">Update</div>
+        </div>
+        <div class="dcap">Every stage is one or more GPU kernels. "Update" is where 2PGA lives.</div>
+      </div>
+
+      <h3>Forward pass</h3>
+      <p>Each thread copies its own image into an activation buffer, then for every layer computes
+      <span class="mono">z = W·a + b</span>, applies ReLU (hidden layers) or softmax (output layer).
+      Softmax subtracts the largest value before exponentiating — a standard trick to stop very large
+      numbers from overflowing.</p>
+
+      <h3>Backward pass</h3>
+      <p>Because the output uses softmax + cross-entropy, the output error has an unusually clean form:
+      <span class="mono">δ = prediction − true_label</span>. Every earlier layer's error is found by
+      pushing that signal back through the transpose of the weight matrix, masked by the ReLU
+      derivative — a plain 0-or-1 gate depending on whether the forward-pass value was positive.</p>
+
+      <h3>Memory layout</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>What's in GPU memory</th><th>Approx. size</th><th>Lives for</th></tr></thead>
+        <tbody>
+          <tr><td class="prose">Training images (60,000)</td><td>≈ 188 MB</td><td class="prose">the whole run — uploaded once</td></tr>
+          <tr><td class="prose">Test images (10,000)</td><td>≈ 31 MB</td><td class="prose">the whole run</td></tr>
+          <tr><td class="prose">Weights + biases</td><td>≈ 470 KB</td><td class="prose">the whole run</td></tr>
+          <tr><td class="prose">Per-batch scratch (activations, deltas)</td><td>≈ 8.5 MB</td><td class="prose">re-used every batch</td></tr>
+          <tr><td class="prose">Adam's extra memory (m, v)</td><td>≈ 0.94 MB</td><td class="prose">the whole run</td></tr>
+        </tbody>
+      </table></div>
+      <p>The dataset dominates the footprint — and because it's uploaded once and stays resident in
+      VRAM, the GPU never re-reads it from scratch the way a CPU implementation re-reads it every
+      epoch. That's a real part of why the GPU numbers look so favorable, not just raw compute speed.</p>
+
+      <h3>Threads, blocks, and why the race condition is even possible</h3>
+      <p>Threads are grouped into small teams called <strong>blocks</strong> (128 or 256 threads each
+      here). Threads inside one block can synchronize with each other; blocks cannot synchronize with
+      other blocks in the middle of a kernel. With 2,048 threads split across 16 blocks, there is no
+      built-in way for one block to know what another block is doing at any given instant — which is
+      exactly the condition a race condition needs to exist.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="optimizers">
+      <div class="eyebrow">05 — The Optimizers</div>
+      <h2>SGD, Momentum, and Adam — how each one behaves under the hood</h2>
+
+      <h3>SGD — the one that was never broken</h3>
+      <p><span class="mono">θ ← θ − η·g</span>. No memory between steps, so there's nothing for two
+      threads to race over. Summing gradients is commutative — <code class="k">atomicAdd</code> alone
+      is already completely correct. This is exactly why the bug is easy to miss: test SGD first, and
+      everything looks fine.</p>
+
+      <h3>Momentum — fails without the fix</h3>
+      <p><span class="mono">v ← βv + g</span>, then <span class="mono">θ ← θ − ηv</span>. That
+      <span class="mono">v</span> is a single shared number that <em>every thread</em> wants to read,
+      update, and write back. Two threads reading the same old <span class="mono">v</span> and racing to
+      write their own version back means one of them always loses — permanently, not just delayed.</p>
+      <div class="callout-warn"><span class="tag">Without 2PGA</span><p>97.2% → 0.0%</p></div>
+
+      <h3>Adam — the same failure, twice over</h3>
+      <p>Adam keeps <em>two</em> running estimates instead of one: <span class="mono">m</span> (a
+      moving average of the gradient) and <span class="mono">v</span> (a moving average of the squared
+      gradient). The identical race happens on both simultaneously.</p>
+      <div class="eqn-block" style="text-align:center;font-style:italic;margin:14px 0;">
+        m = β₁m + (1−β₁)g &nbsp;·&nbsp; v = β₂v + (1−β₂)g² &nbsp;·&nbsp;
+        θ ← θ − η·m̂/(√v̂ + ε)
+      </div>
+      <div class="callout-warn"><span class="tag">Without 2PGA</span><p>97.2% → 0.0% — identical failure signature to Momentum</p></div>
+
+      <div class="callout-good">
+        <span class="tag">A real, subtle detail worth knowing</span>
+        <p>Adam's bias-correction step counter is supposed to increase once every mini-batch. In this
+        codebase it currently increases once per <em>epoch</em> instead — so across 20 epochs of 23
+        mini-batches each, it only ever reaches 20, not 460. This doesn't touch the race-condition story
+        at all (it's just bookkeeping), but it's a genuine, checkable detail if anyone asks about it
+        closely.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="bn">
+      <div class="eyebrow">06 — Batch Normalization</div>
+      <h2>Why batch norm needs its own GPU strategy</h2>
+      <p>Batch normalization re-centers every neuron's values using the mean and variance <em>across
+      the whole batch</em>. That's the catch: computing a mean needs every one of 2,048 samples' values
+      already sitting in memory — but a single kernel launch can't guarantee that, since different
+      thread blocks run in no particular order relative to each other.</p>
+
+      <div class="diagram">
+        <div class="dflex">
+          <div class="dbox">linear</div><div class="darrow">→</div>
+          <div class="dbox" style="border-style:dashed;color:var(--ink-faint);">sync</div><div class="darrow">→</div>
+          <div class="dbox">stats</div><div class="darrow">→</div>
+          <div class="dbox">apply</div><div class="darrow">→</div>
+          <div class="dbox">activate</div>
+        </div>
+        <div class="dcap">Same synchronization principle as 2PGA — a hard barrier before anyone reads a value that depends on the whole batch.</div>
+      </div>
+
+      <div class="eqn-block" style="text-align:center;font-style:italic;margin:14px 0;">
+        μ = mean(z) &nbsp;·&nbsp; σ² = variance(z) &nbsp;·&nbsp;
+        ẑ = (z − μ)/√(σ²+ε) &nbsp;·&nbsp; output = γẑ + β
+      </div>
+
+      <p>The fix is a staged pipeline of small kernels, each one finishing completely before the next
+      begins: compute the linear layer, synchronize, compute batch statistics with a parallel
+      reduction, apply the normalization, then activate. The same shape repeats going backward.</p>
+
+      <div class="callout-warn">
+        <span class="tag">An older, unused implementation still exists</span>
+        <p>The source also contains an earlier batch-norm implementation
+        (<code class="k">batch_norm_forward</code>, <code class="k">batch_norm_backward</code>) that
+        has exactly the race-prone shape this section describes fixing. It still compiles, but the
+        actual training loop never calls it — it was superseded by the staged pipeline above and left
+        in place as an artifact of the project's history.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="lr">
+      <div class="eyebrow">07 — Learning Rate</div>
+      <h2>Learning rate scheduling</h2>
+      <p>Three schedules are supported — step decay, exponential decay, and cosine annealing — chosen
+      at compile time. One implementation choice mattered more than expected: whether the schedule
+      counts by <em>epoch</em> or by <em>mini-batch step</em>.</p>
+      <div class="callout-warn">
+        <span class="tag">What went wrong the first time</span>
+        <p>Indexing by epoch instead of by step compresses the entire decay curve into 23 times fewer
+        steps than intended (since there are 23 mini-batches per epoch here) — the learning rate
+        collapses toward zero long before the network has actually converged. Indexing by the true
+        global step fixes it.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="results">
+      <div class="eyebrow">08 — Results</div>
+      <h2>What the numbers actually mean</h2>
+
+      <div class="twrap"><table>
+        <thead><tr><th>Configuration</th><th>Test Accuracy</th><th>Time / Epoch</th><th>vs. SGD</th></tr></thead>
+        <tbody>
+          <tr><td class="prose">SGD</td><td>94.3%</td><td>0.94 s</td><td class="prose">baseline</td></tr>
+          <tr><td class="prose">Momentum</td><td>97.2%</td><td>0.96 s</td><td class="prose">+2.9 pp — best</td></tr>
+          <tr><td class="prose">Adam</td><td>97.2%</td><td>1.02 s</td><td class="prose">+2.9 pp — tied best</td></tr>
+          <tr><td class="prose">Adam + LR schedule</td><td>97.0%</td><td>0.95 s</td><td class="prose">+2.7 pp</td></tr>
+          <tr><td class="prose">BN + SGD</td><td>93.1%</td><td>1.27 s</td><td class="prose">−1.2 pp</td></tr>
+          <tr><td class="prose">BN + Adam + LR</td><td>81.0%</td><td>1.24 s</td><td class="prose">−13.3 pp — the outlier</td></tr>
+        </tbody>
+      </table></div>
+
+      <p>Momentum and Adam land in a statistical tie at 97.2%, both meaningfully ahead of plain SGD.
+      They also converge fast — within 5 of the 20 epochs, both are already within about a point of
+      their final accuracy.</p>
+
+      <div class="callout-warn">
+        <span class="tag">The one result that doesn't behave — and why that's worth saying out loud</span>
+        <p>BN + Adam + LR peaks early at <strong>88.1%</strong> around epoch 2, then <em>declines</em>
+        steadily to 81.0% by epoch 20. A curve that rises then falls is the signature of
+        <strong>instability</strong>, not slow convergence — something is actively getting worse, not
+        just improving slowly. Swapping the per-batch cosine schedule for a per-epoch exponential one
+        only recovered about a point, which rules out the schedule as the main cause. The leading
+        hypothesis is a genuine tug-of-war between Adam's evolving moment estimates and batch norm's
+        evolving statistics — two different kinds of "memory" pulling against each other. It's reported
+        openly as unresolved, not smoothed over.</p>
+      </div>
+
+      <h3>Speed</h3>
+      <p>A serial CPU baseline takes roughly 2,070 seconds per epoch (measured, not just estimated).
+      Every CUDA configuration finishes in about one second — SGD's 0.94 seconds is a
+      <strong>2,202×</strong> speedup, and even the heaviest configuration still holds
+      <strong>1,669×</strong>.</p>
+
+      <h3>Footprint</h3>
+      <div class="twrap"><table>
+        <thead><tr><th>Metric</th><th>CUDAnet</th><th>PyTorch</th></tr></thead>
+        <tbody>
+          <tr><td class="prose">Peak VRAM</td><td>~470 KB</td><td>248 MB</td></tr>
+          <tr><td class="prose">Install size</td><td>&lt; 2 MB</td><td>1.8 GB</td></tr>
+          <tr><td class="prose">Runtime dependencies</td><td>libcuda.so</td><td>Python + libtorch</td></tr>
+          <tr><td class="prose">Startup time</td><td>&lt; 100 ms</td><td>~3–5 s</td></tr>
+        </tbody>
+      </table></div>
+      <p>PyTorch is faster per epoch and slightly more accurate — cuDNN and cuBLAS earn their keep.
+      The point of this comparison isn't "CUDAnet wins," it's that on a memory-constrained edge device,
+      a 500×-smaller footprint is sometimes the only number that matters.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="glossary">
+      <div class="eyebrow">09 — Glossary</div>
+      <h2>Every term, simply first, then technically</h2>
+      <div class="gloss">
+        <div class="gterm"><div class="gname">Thread</div>
+          <p class="gsimple">One tiny independent worker on the GPU — usually handling one training image here.</p>
+          <p class="gtech">The smallest unit of execution on a GPU: its own registers and program counter, one of thousands launched to run identical code over different data.</p></div>
+        <div class="gterm"><div class="gname">Kernel</div>
+          <p class="gsimple">The one small program every thread runs at the same time.</p>
+          <p class="gtech">A <code class="k">__global__</code> function launched from the host with a specified thread count, executed identically but on different data by every thread.</p></div>
+        <div class="gterm"><div class="gname">Block / Grid</div>
+          <p class="gsimple">Threads are grouped into small teams (blocks); all the blocks together are the grid — like a stadium organized into sections.</p>
+          <p class="gtech">A block (128–256 threads here) can synchronize internally and share fast on-chip memory; blocks cannot synchronize with each other mid-kernel — the root structural reason the race condition is possible.</p></div>
+        <div class="gterm"><div class="gname">Race condition</div>
+          <p class="gsimple">Two workers update the same shared notebook at once; whoever writes last erases the other's update, silently.</p>
+          <p class="gtech">Undefined behavior when two-plus threads access the same memory concurrently with at least one write and no enforced ordering.</p></div>
+        <div class="gterm"><div class="gname">atomicAdd / atomic operation</div>
+          <p class="gsimple">One action guaranteed to happen all at once — nobody can interrupt it halfway.</p>
+          <p class="gtech">A hardware-guaranteed indivisible read-modify-write. It only protects that single operation — a multi-step formula built around it is not automatically made safe.</p></div>
+        <div class="gterm"><div class="gname">Synchronization barrier (cudaDeviceSynchronize)</div>
+          <p class="gsimple">A checkpoint: make everyone finish the current task before anyone starts the next.</p>
+          <p class="gtech">A host-side call that blocks until every previously launched kernel has fully completed — the reliable way to guarantee visibility of all writes before a dependent kernel reads them.</p></div>
+        <div class="gterm"><div class="gname">Batch normalization</div>
+          <p class="gsimple">Re-centers a layer's values using the batch's own average and spread, then lets the network re-scale/re-shift as it prefers.</p>
+          <p class="gtech">Normalizes pre-activations per feature over the mini-batch (μ, σ²), then applies a learned affine transform (γ, β).</p></div>
+        <div class="gterm"><div class="gname">Throughput / speedup</div>
+          <p class="gsimple">How much work gets done per second, and how many times faster that is than the slow way.</p>
+          <p class="gtech">Speedup = T<sub>baseline</sub> / T<sub>accelerated</sub>, measured via CUDA event timers against a serial CPU implementation of the same algorithm.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="qa">
+      <div class="eyebrow">10 — Questions People Ask</div>
+      <h2>The questions that come up, answered</h2>
+      <div class="qa"><p class="q">Why doesn't atomicAdd already fix the race condition?</p>
+        <p class="a">Because it only makes one addition indivisible. Momentum's update is "read the old velocity, multiply, add, write back" — several steps. An atomic protects one step, not the whole sequence.</p></div>
+      <div class="qa"><p class="q">Does this bug affect anything besides Momentum and Adam?</p>
+        <p class="a">Any optimizer with state that carries across steps — RMSProp, LAMB, Adagrad — has the identical failure mode and the identical fix. SGD is the one clean exception, since it has no such state.</p></div>
+      <div class="qa"><p class="q">Isn't this the same thing frameworks already do?</p>
+        <p class="a">Structurally, yes — <code class="k">optimizer.step()</code> is always separate from <code class="k">backward()</code>. The contribution here is making that separation explicit and proving, with real before/after numbers, exactly what breaks if you skip it.</p></div>
+      <div class="qa"><p class="q">Why does the barrier (cudaDeviceSynchronize) matter if kernels on the same stream already run in order?</p>
+        <p class="a">In this specific single-stream program, default ordering already guarantees it — the explicit barrier is best understood as defensive, unambiguous correctness, and it's what genuinely matters for the Phase 1 → Phase 2 boundary and for accurate timing/evaluation.</p></div>
+      <div class="qa"><p class="q">Why is the full-feature build (BN + Adam + LR) the worst-performing configuration?</p>
+        <p class="a">Because the actual contribution is the two-phase mechanism, not any one configuration being "the best." Reporting the BN+Adam interaction honestly is what makes the other numbers trustworthy.</p></div>
+      <div class="qa"><p class="q">Is the WMMA / Tensor Core build actually using Tensor Cores?</p>
+        <p class="a">Not currently — the real WMMA kernels exist in the source and are architecturally correct, but a preprocessor flag issue keeps them from being compiled into the default build. It's an honest gap, not a claim made anywhere in the paper.</p></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="summary">
+      <div class="eyebrow">11 — Contributions &amp; Limits</div>
+      <h2>What this project actually contributes — and where it falls short</h2>
+      <h3>Contributions</h3>
+      <ul>
+        <li><strong>Two-Phase Gradient Accumulation</strong> — a general, lock-free fix for any stateful optimizer parallelized on a GPU.</li>
+        <li>A correct, synchronized CUDA implementation of Batch Normalization.</li>
+        <li>A &lt; 2 MB, dependency-free training engine, benchmarked directly against PyTorch.</li>
+        <li>An empirical, reproducible before/after demonstration — not just a theoretical argument.</li>
+      </ul>
+      <h3>Limitations</h3>
+      <ul>
+        <li>MLP accuracy (97.2%) trails CNN-level results (&gt;99%) — a deliberate scope choice, not an oversight.</li>
+        <li>BN + Adam + LR's instability is real and not yet fully explained.</li>
+        <li>Single GPU, single seed — the qualitative result (0%→97%) is robust; absolute numbers are not claimed to generalize across hardware.</li>
+        <li>Phase 2's synchronization overhead grows with batch size — about +17% epoch time at 4,096 vs. 2,048.</li>
+      </ul>
+      <h3>Future work</h3>
+      <ul>
+        <li>Wire up the already-implemented Tensor Core (WMMA) kernels for a further 2–3× throughput.</li>
+        <li>Add convolutional layers via im2col to push past MNIST toward CIFAR-10.</li>
+        <li>Scale to multiple GPUs via NCCL AllReduce — requires no change to the core 2PGA argument.</li>
+      </ul>
+    </section>
+
+    <hr class="div"/>
+
+    <!-- ============================================================ -->
+    <section class="sec" id="cheatsheet">
+      <div class="eyebrow">★ Quick Reference</div>
+      <h2>One-screen cheat sheet</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>If you need to remember one thing…</th><th>…remember this</th></tr></thead>
+        <tbody>
+          <tr><td class="prose">The bug</td><td class="prose">Momentum/Adam keep memory across steps; thousands of threads racing on that shared memory silently corrupt it.</td></tr>
+          <tr><td class="prose">The signature</td><td class="prose">Accuracy collapses to ~0% — not slow training, broken training.</td></tr>
+          <tr><td class="prose">The fix's name</td><td class="prose">Two-Phase Gradient Accumulation (2PGA)</td></tr>
+          <tr><td class="prose">The fix's shape</td><td class="prose">Phase 1: many threads may only sum. Phase 2: one thread per weight may update.</td></tr>
+          <tr><td class="prose">The fix's cost</td><td class="prose">&lt; 0.5% of runtime</td></tr>
+          <tr><td class="prose">The best config</td><td class="prose">Momentum or Adam, 97.2% — not the full BN+Adam+LR stack (81.0%)</td></tr>
+          <tr><td class="prose">The speedup</td><td class="prose">2,202× over a measured serial CPU baseline</td></tr>
+          <tr><td class="prose">The honest weak spot</td><td class="prose">BN + Adam interaction — peaks early, then degrades; unresolved, reported openly</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <footer class="pagefoot">
+      One-page explanation of CUDAnet — architecture, the race condition, the fix, results, and the
+      questions that come up, all cross-checked directly against the source code, the raw result logs,
+      and the paper.
+    </footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section, #tldr'));
+  if (!('IntersectionObserver' in window)) return;
+  var current = null;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if (entry.isIntersecting){
+        if (current) current.classList.remove('active');
+        var link = map[entry.target.id];
+        if (link){ link.classList.add('active'); current = link; }
+      }
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  sections.forEach(function(s){ io.observe(s); });
+})();
+</script>
